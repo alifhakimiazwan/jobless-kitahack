@@ -181,9 +181,11 @@ async def interview_websocket(ws: WebSocket, session_id: str):
 
         # Task: receive events from Gemini and forward to browser
         async def forward_agent_responses():
-            # Track last finalized text per role to skip duplicates
-            last_final_output = ""
-            last_final_input = ""
+            # After a final transcription is sent for a role, skip all
+            # subsequent events for that role until the OTHER role speaks.
+            # This prevents the API's "confirmed" re-send from duplicating.
+            output_done = False
+            input_done = False
 
             try:
                 async for event in runner.run_live(
@@ -200,38 +202,36 @@ async def interview_websocket(ws: WebSocket, session_id: str):
 
                     # --- Agent speech transcription ---
                     if event.output_transcription and event.output_transcription.text:
-                        text = event.output_transcription.text
-                        is_final = bool(event.output_transcription.finished)
-                        # Skip if this final text was already sent
-                        if is_final and text == last_final_output:
-                            continue
-                        if is_final:
-                            last_final_output = text
-                        await _send_json(ws, {
-                            "type": "transcript",
-                            "role": "agent",
-                            "text": text,
-                            "is_final": is_final,
-                        })
+                        if not output_done:
+                            text = event.output_transcription.text
+                            is_final = bool(event.output_transcription.finished)
+                            await _send_json(ws, {
+                                "type": "transcript",
+                                "role": "agent",
+                                "text": text,
+                                "is_final": is_final,
+                            })
+                            if is_final:
+                                output_done = True
+                                input_done = False  # new turn: user can speak next
 
                     # --- User speech transcription ---
                     if event.input_transcription and event.input_transcription.text:
-                        text = event.input_transcription.text
-                        is_final = bool(event.input_transcription.finished)
-                        # Skip if this final text was already sent
-                        if is_final and text == last_final_input:
-                            continue
-                        if is_final:
-                            last_final_input = text
-                            session_manager.add_transcript_entry(
-                                session_id, role="candidate", text=text,
-                            )
-                        await _send_json(ws, {
-                            "type": "transcript",
-                            "role": "user",
-                            "text": text,
-                            "is_final": is_final,
-                        })
+                        if not input_done:
+                            text = event.input_transcription.text
+                            is_final = bool(event.input_transcription.finished)
+                            await _send_json(ws, {
+                                "type": "transcript",
+                                "role": "user",
+                                "text": text,
+                                "is_final": is_final,
+                            })
+                            if is_final:
+                                input_done = True
+                                output_done = False  # new turn: agent can speak next
+                                session_manager.add_transcript_entry(
+                                    session_id, role="candidate", text=text,
+                                )
 
                     # Check if phase changed
                     current_session = session_manager.get_session(session_id)

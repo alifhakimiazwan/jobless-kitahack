@@ -7,14 +7,20 @@ import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { Textarea } from "@/components/ui/textarea"
 import { startInterview, getCompanies, getPositions } from "@/services/api"
 import type { QuestionType, StartInterviewRequest } from "@/types/interview.types"
-import { Briefcase, Mic, BarChart3, Loader2 } from "lucide-react"
+import { Briefcase, Mic, BarChart3, Loader2, FileText, ChevronDown, ChevronUp } from "lucide-react"
+
+const TOP_COMPANIES = ["Grab", "Shopee", "Google", "TNG Digital", "Petronas Digital", "AirAsia"]
+const GENERIC_COMPANIES = ["Generic Tech", "Generic Non-Tech"]
 
 const QUESTION_TYPE_OPTIONS: { value: QuestionType; label: string }[] = [
   { value: "behavioral", label: "Behavioral" },
@@ -33,22 +39,40 @@ export default function HomePage() {
   const [questionCount, setQuestionCount] = useState("5")
   const [companies, setCompanies] = useState<string[]>([])
   const [positions, setPositions] = useState<string[]>([])
+  const [jobDescription, setJobDescription] = useState("")
+  const [showJD, setShowJD] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const isGeneric = company.startsWith("Generic")
 
   useEffect(() => {
     getCompanies()
       .then(setCompanies)
-      .catch(() => setCompanies(["Grab", "Shopee", "Google", "TNG Digital", "Petronas Digital", "AirAsia", "Generic Tech", "Generic Non-Tech"]))
+      .catch(() => setCompanies([...TOP_COMPANIES, ...GENERIC_COMPANIES]))
   }, [])
 
   useEffect(() => {
-    if (company) {
+    if (company && !isGeneric) {
       getPositions(company)
         .then(setPositions)
         .catch(() => setPositions(["Software Engineer", "Product Manager", "Data Analyst"]))
     }
-  }, [company])
+  }, [company, isGeneric])
+
+  const handleCompanyChange = (v: string) => {
+    const wasGeneric = company.startsWith("Generic")
+    const nowGeneric = v.startsWith("Generic")
+    setCompany(v)
+    setPosition("")
+    if (wasGeneric && !nowGeneric) {
+      setJobDescription("")
+      setShowJD(false)
+    }
+    if (nowGeneric) {
+      setShowJD(true)
+    }
+  }
 
   const toggleQuestionType = (type: QuestionType) => {
     setQuestionTypes((prev) =>
@@ -78,6 +102,7 @@ export default function HomePage() {
         position,
         question_types: questionTypes,
         question_count: parseInt(questionCount),
+        ...(jobDescription.trim() && { job_description: jobDescription.trim() }),
       }
 
       const response = await startInterview(request)
@@ -151,30 +176,88 @@ export default function HomePage() {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Company</Label>
-              <Select value={company} onValueChange={(v) => { setCompany(v); setPosition("") }}>
+              <Select value={company} onValueChange={handleCompanyChange}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select company" />
                 </SelectTrigger>
                 <SelectContent>
-                  {companies.map((c) => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
-                  ))}
+                  <SelectGroup>
+                    <SelectLabel>Top Malaysian Companies</SelectLabel>
+                    {companies.filter((c) => TOP_COMPANIES.includes(c)).map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                  <SelectGroup>
+                    <SelectLabel>Generic</SelectLabel>
+                    {companies.filter((c) => GENERIC_COMPANIES.includes(c)).map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
               <Label>Position</Label>
-              <Select value={position} onValueChange={setPosition} disabled={!company}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select position" />
-                </SelectTrigger>
-                <SelectContent>
-                  {positions.map((p) => (
-                    <SelectItem key={p} value={p}>{p}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {isGeneric ? (
+                <Input
+                  placeholder="e.g. Marketing Executive"
+                  value={position}
+                  onChange={(e) => setPosition(e.target.value)}
+                />
+              ) : (
+                <Select value={position} onValueChange={setPosition} disabled={!company}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select position" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {positions.map((p) => (
+                      <SelectItem key={p} value={p}>{p}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
+          </div>
+
+          {/* Job Description */}
+          <div className="space-y-2">
+            {!isGeneric && (
+              <button
+                type="button"
+                onClick={() => setShowJD(!showJD)}
+                className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <FileText className="h-4 w-4" />
+                Paste Job Description (Optional)
+                {showJD ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                {jobDescription.trim() && (
+                  <Badge variant="secondary" className="ml-1 text-xs">Added</Badge>
+                )}
+              </button>
+            )}
+            {isGeneric && (
+              <Label className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Job Description
+              </Label>
+            )}
+            {showJD && (
+              <div className="space-y-1.5">
+                <Textarea
+                  placeholder={isGeneric
+                    ? "Paste the job description here — this helps tailor your interview questions to the role..."
+                    : "Paste the job description here to get tailored interview questions..."
+                  }
+                  value={jobDescription}
+                  onChange={(e) => setJobDescription(e.target.value.slice(0, 5000))}
+                  rows={6}
+                  className="resize-y"
+                />
+                <p className="text-xs text-muted-foreground text-right">
+                  {jobDescription.length}/5000
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Question Types */}

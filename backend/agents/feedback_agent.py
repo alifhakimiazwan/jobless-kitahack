@@ -89,6 +89,7 @@ class FeedbackAgent:
         company: str,
         position: str,
         evaluation_data: dict,
+        jd_summary: str | None = None,
         max_retries: int = 2,
     ) -> Dict[str, Any]:
         """
@@ -100,18 +101,28 @@ class FeedbackAgent:
             company: Company name
             position: Position applied for
             evaluation_data: Output from the evaluator agent
+            jd_summary: Optional JD summary for context-aware feedback
             max_retries: Number of retries on failure
 
         Returns:
             Dict with feedback report
         """
+        jd_context = ""
+        if jd_summary:
+            jd_context = f"""
+## Job Description Context:
+{jd_summary}
+Reference these specific role requirements when providing feedback and action items.
+
+"""
+
         prompt = f"""Generate a detailed feedback report for this interview:
 
 Candidate: {candidate_name}
 Company: {company}
 Position: {position}
 Session ID: {session_id}
-
+{jd_context}
 ## Evaluation Data:
 {json.dumps(evaluation_data, indent=2)}
 

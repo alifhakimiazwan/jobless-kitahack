@@ -16,6 +16,7 @@ export interface StartInterviewRequest {
   position: string
   question_types: QuestionType[]
   question_count: number
+  job_description?: string
 }
 
 export interface StartInterviewResponse {

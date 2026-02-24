@@ -4,6 +4,7 @@ Manages the interview flow: greeting → questions → closing → complete.
 Uses Gemini 2.5 Flash for low-latency voice interaction.
 """
 
+import random
 import logging
 from google.adk.agents import LlmAgent
 from google.genai import types
@@ -13,6 +14,8 @@ logger = logging.getLogger(__name__)
 CONDUCTOR_INSTRUCTION = """You are a professional job interviewer conducting a practice interview.
 
 ## Interview Context
+- Your name: {interviewer_name}
+- Your role: {interviewer_role}
 - Candidate name: {candidate_name}
 - Company: {company}
 - Position: {position}
@@ -29,7 +32,7 @@ CONDUCTOR_INSTRUCTION = """You are a professional job interviewer conducting a p
 You MUST follow this exact flow by calling the appropriate tools:
 
 ### Phase 1: Greeting
-- Introduce yourself as the interviewer
+- Introduce yourself by your name and role
 - Welcome the candidate by name
 - Briefly describe what the interview will cover
 - Ask if they're ready to begin
@@ -62,6 +65,20 @@ You MUST follow this exact flow by calling the appropriate tools:
 """
 
 
+INTERVIEWER_NAMES = [
+    ("Sarah Tan", "Engineering Manager"),
+    ("David Lim", "Senior Technical Recruiter"),
+    ("Priya Sharma", "Head of Engineering"),
+    ("James Wong", "VP of Product"),
+    ("Aisha Rahman", "Technical Lead"),
+    ("Kevin Ng", "Hiring Manager"),
+    ("Mei Ling Chong", "Director of Engineering"),
+    ("Raj Patel", "Senior Software Engineer"),
+    ("Fiona Lee", "People & Culture Lead"),
+    ("Ahmad Zulkifli", "Engineering Director"),
+]
+
+
 def create_conductor_agent(
     candidate_name: str,
     company: str,
@@ -76,7 +93,11 @@ def create_conductor_agent(
         model: Model to use. Use config.GEMINI_LIVE_MODEL for voice,
                config.GEMINI_TEXT_MODEL for text fallback.
     """
+    interviewer_name, interviewer_role = random.choice(INTERVIEWER_NAMES)
+
     instruction = CONDUCTOR_INSTRUCTION.format(
+        interviewer_name=interviewer_name,
+        interviewer_role=interviewer_role,
         candidate_name=candidate_name,
         company=company,
         position=position,
