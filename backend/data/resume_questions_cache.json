@@ -1,0 +1,26 @@
+{
+  "4f945b4f-de0d-45a9-b434-5941c1b8ea33": {
+    "questions": [
+      {
+        "id": "resume_q_001",
+        "question": "Can you walk me through your most relevant experience for this role?",
+        "type": "behavioral",
+        "difficulty": "easy"
+      },
+      {
+        "id": "resume_q_002", 
+        "question": "What specific technical skills are you most proud of developing?",
+        "type": "technical",
+        "difficulty": "medium"
+      },
+      {
+        "id": "resume_q_003",
+        "question": "Tell me about a challenging project you've worked on and how you overcame obstacles.",
+        "type": "situational", 
+        "difficulty": "medium"
+      }
+    ],
+    "timestamp": "4f945b4f-de0d-45a9-b434-5941c1b8ea33",
+    "created_at": "/home/hamzah/git/jobless-kitahack"
+  }
+}
