@@ -80,6 +80,7 @@ class EvaluatorAgent:
         company: str,
         position: str,
         transcript_data: list[dict],
+        jd_summary: str | None = None,
         max_retries: int = 2,
     ) -> Dict[str, Any]:
         """
@@ -90,15 +91,25 @@ class EvaluatorAgent:
             company: Company name
             position: Position applied for
             transcript_data: List of {question, question_id, answer, evaluation_criteria}
+            jd_summary: Optional JD summary for context-aware scoring
             max_retries: Number of retries on failure
 
         Returns:
             Dict with evaluation results
         """
+        jd_context = ""
+        if jd_summary:
+            jd_context = f"""
+## Job Description Context:
+{jd_summary}
+Use this JD context to evaluate how well answers align with the specific role requirements.
+
+"""
+
         prompt = f"""Evaluate this completed interview for a {position} position at {company}.
 
 Session ID: {session_id}
-
+{jd_context}
 ## Interview Transcript:
 {json.dumps(transcript_data, indent=2)}
 

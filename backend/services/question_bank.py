@@ -89,7 +89,11 @@ class QuestionBank:
             pool += self.filter(company="Generic Non-Tech", question_types=question_types)
 
         if not pool:
-            # Last resort: any questions
+            # Fallback: any company, just match the requested types
+            pool = self.filter(question_types=question_types)
+
+        if not pool:
+            # Absolute last resort: any questions
             pool = self.questions
 
         count = min(count, len(pool))

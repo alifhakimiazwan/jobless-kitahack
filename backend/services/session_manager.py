@@ -17,6 +17,7 @@ from models.schemas import (
     Question,
 )
 from services.question_bank import question_bank
+from services.jd_question_generator import generate_questions_from_jd
 
 logger = logging.getLogger(__name__)
 
@@ -27,17 +28,34 @@ class SessionManager:
     def __init__(self):
         self._sessions: Dict[str, InterviewSession] = {}
 
-    def create_session(self, config: InterviewConfig) -> InterviewSession:
+    async def create_session(self, config: InterviewConfig) -> InterviewSession:
         """Create a new interview session with selected questions."""
         session_id = str(uuid.uuid4())
 
-        # Select questions from the bank
-        questions = question_bank.select(
-            company=config.company,
-            position=config.position,
-            question_types=config.question_types,
-            count=config.question_count,
-        )
+        questions = []
+        jd_summary = None
+
+        if config.job_description:
+            try:
+                questions, jd_summary = await generate_questions_from_jd(
+                    job_description=config.job_description,
+                    company=config.company,
+                    position=config.position,
+                    question_types=config.question_types,
+                    count=config.question_count,
+                )
+                logger.info(f"Generated {len(questions)} JD-tailored questions for session {session_id}")
+            except Exception as e:
+                logger.warning(f"JD question generation failed, falling back to static bank: {e}")
+                questions = []
+
+        if not questions:
+            questions = question_bank.select(
+                company=config.company,
+                position=config.position,
+                question_types=config.question_types,
+                count=config.question_count,
+            )
 
         session = InterviewSession(
             session_id=session_id,
@@ -47,6 +65,7 @@ class SessionManager:
             current_question_index=0,
             questions=questions,
             transcript=[],
+            jd_summary=jd_summary,
             created_at=time.time(),
         )
 

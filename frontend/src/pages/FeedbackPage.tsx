@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useParams, Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -99,45 +99,57 @@ export default function FeedbackPage() {
   const [status, setStatus] = useState<InterviewStatus | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [evaluationTriggered, setEvaluationTriggered] = useState(false)
-
-  const pollForFeedback = useCallback(async () => {
-    if (!sessionId) return
-
-    try {
-      const statusRes = await getInterviewStatus(sessionId)
-      setStatus(statusRes.status)
-
-      if (statusRes.status === "evaluated") {
-        const feedbackData = await getFeedback(sessionId)
-        setFeedback(feedbackData)
-        setIsLoading(false)
-      } else if (statusRes.status === "completed" && !evaluationTriggered) {
-        // Trigger evaluation
-        await triggerEvaluation(sessionId)
-        setEvaluationTriggered(true)
-      } else if (statusRes.status === "evaluating") {
-        // Continue polling
-        setTimeout(pollForFeedback, 3000)
-      } else {
-        setIsLoading(false)
-      }
-    } catch (err) {
-      // Check if feedback is already available
-      try {
-        const feedbackData = await getFeedback(sessionId)
-        setFeedback(feedbackData)
-        setIsLoading(false)
-      } catch {
-        setError(err instanceof Error ? err.message : "Failed to load feedback")
-        setIsLoading(false)
-      }
-    }
-  }, [sessionId, evaluationTriggered])
+  const evaluationTriggeredRef = useRef(false)
 
   useEffect(() => {
-    pollForFeedback()
-  }, [pollForFeedback])
+    if (!sessionId) return
+
+    let cancelled = false
+
+    async function poll() {
+      if (cancelled) return
+
+      try {
+        const statusRes = await getInterviewStatus(sessionId)
+        if (cancelled) return
+        setStatus(statusRes.status)
+
+        if (statusRes.status === "evaluated") {
+          const feedbackData = await getFeedback(sessionId)
+          if (cancelled) return
+          setFeedback(feedbackData)
+          setIsLoading(false)
+          return
+        }
+
+        if (statusRes.status === "completed" && !evaluationTriggeredRef.current) {
+          await triggerEvaluation(sessionId)
+          evaluationTriggeredRef.current = true
+        }
+
+        // Keep polling for any non-terminal status
+        if (!cancelled) {
+          setTimeout(poll, 3000)
+        }
+      } catch (err) {
+        if (cancelled) return
+        // Check if feedback is already available
+        try {
+          const feedbackData = await getFeedback(sessionId)
+          if (cancelled) return
+          setFeedback(feedbackData)
+          setIsLoading(false)
+        } catch {
+          setError(err instanceof Error ? err.message : "Failed to load feedback")
+          setIsLoading(false)
+        }
+      }
+    }
+
+    poll()
+
+    return () => { cancelled = true }
+  }, [sessionId])
 
   if (isLoading) {
     return (

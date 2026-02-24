@@ -56,6 +56,7 @@ async def run_evaluation(session_id: str) -> Dict[str, Any]:
             company=session.config.company,
             position=session.config.position,
             transcript_data=transcript_data,
+            jd_summary=session.jd_summary,
         )
 
         if eval_result.get("status") != "success":
@@ -71,6 +72,7 @@ async def run_evaluation(session_id: str) -> Dict[str, Any]:
             company=session.config.company,
             position=session.config.position,
             evaluation_data=eval_result,
+            jd_summary=session.jd_summary,
         )
 
         if feedback_result.get("status") != "success":
