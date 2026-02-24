@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from "react"
-import { useParams, Link } from "react-router-dom"
+import { Link, useNavigate, useParams } from "react-router-dom"
+import ReactMarkdown from "react-markdown"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   ArrowLeft,
   Upload,
@@ -17,6 +18,9 @@ import {
   MessageSquare,
   Loader2,
 } from "lucide-react"
+
+// API service
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
 
 interface Message {
   id: string
@@ -32,20 +36,158 @@ interface ResumeFile {
   url: string
 }
 
+interface ResumeSummary {
+  session_id: string
+  overall_assessment: {
+    summary: string
+    grade: string
+    market_readiness: string
+  }
+  first_impression_analysis: {
+    contact_clarity: string
+    professional_summary: string
+    immediate_highlights: string
+    red_flags: string[]
+  }
+  section_feedback: {
+    experience: string
+    skills: string
+    education: string
+    projects: string
+  }
+  market_positioning: {
+    target_companies: string
+    salary_expectations: string
+    skill_priorities: string
+  }
+  actionable_improvements: {
+    area: string
+    suggestion: string
+    example: string
+  }[]
+  potential_questions?: {
+    id: string
+    question: string
+    type: string
+    difficulty: string
+  }[]
+}
+
+// Feedback Overview Component
+const FeedbackOverview = ({ summary }: { summary: ResumeSummary }) => {
+  if (!summary) return null
+  
+  return (
+    <div className="space-y-4 p-4 bg-muted/30 rounded-lg border">
+      {/* Overall Assessment */}
+      <div className="bg-white rounded-lg p-3 shadow-sm border">
+        <h3 className="text-base font-semibold mb-2">Overall Assessment</h3>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-sm font-medium">
+            Grade: {summary.overall_assessment?.grade || 'N/A'}
+          </span>
+          <span className="text-sm text-muted-foreground">
+            {summary.overall_assessment?.market_readiness || 'N/A'}
+          </span>
+        </div>
+        <p className="text-sm text-muted-foreground">{summary.overall_assessment?.summary || 'No summary available'}</p>
+      </div>
+
+      {/* First Impression */}
+      <div className="bg-white rounded-lg p-3 shadow-sm border">
+        <h3 className="text-base font-semibold mb-2">First Impression</h3>
+        <div className="space-y-1 text-sm">
+          <div><strong>Contact:</strong> {summary.first_impression_analysis?.contact_clarity || 'N/A'}</div>
+          <div><strong>Summary:</strong> {summary.first_impression_analysis?.professional_summary || 'N/A'}</div>
+          <div><strong>Highlights:</strong> {summary.first_impression_analysis?.immediate_highlights || 'N/A'}</div>
+        </div>
+      </div>
+
+      {/* Section Feedback */}
+      <div className="bg-white rounded-lg p-3 shadow-sm border">
+        <h3 className="text-base font-semibold mb-2">Section Feedback</h3>
+        <div className="grid grid-cols-1 gap-2 text-sm">
+          <div><strong>Experience:</strong> {summary.section_feedback?.experience || 'N/A'}</div>
+          <div><strong>Skills:</strong> {summary.section_feedback?.skills || 'N/A'}</div>
+          <div><strong>Education:</strong> {summary.section_feedback?.education || 'N/A'}</div>
+        </div>
+      </div>
+
+      {/* Top Improvements */}
+      <div className="bg-white rounded-lg p-3 shadow-sm border">
+        <h3 className="text-base font-semibold mb-2">Top Improvements</h3>
+        <div className="space-y-2">
+          {summary.actionable_improvements?.slice(0, 3).map((improvement, idx) => (
+            <div key={idx} className="border-l-2 border-blue-500 pl-2">
+              <div className="font-medium text-sm">{improvement.area}</div>
+              <div className="text-sm text-muted-foreground">{improvement.suggestion}</div>
+            </div>
+          )) || <div className="text-sm text-muted-foreground">No improvements identified</div>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Potential Questions Section Component
+const PotentialQuestionsSection = ({ questions, sessionId }: { questions: any[], sessionId: string }) => {
+  return (
+    <div className="mt-6 p-4 bg-muted/30 rounded-lg border">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold">Potential Interview Questions</h3>
+        <span className="text-sm text-muted-foreground">
+          Based on your resume analysis
+        </span>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {questions.map((question: any, index: number) => (
+          <div key={question.id} className="bg-white p-3 rounded-lg shadow-sm border">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-muted-foreground">
+                {question.type} • {question.difficulty}
+              </span>
+              <Badge variant="outline" className="text-xs">
+                Q{index + 1}
+              </Badge>
+            </div>
+            <p className="text-sm">{question.question}</p>
+          </div>
+        ))}
+      </div>
+      
+      <div className="mt-4 flex justify-center">
+        <Link to={`/interview/${sessionId}`}>
+          <Button className="flex items-center gap-2">
+            Proceed to Interview
+            <ArrowLeft className="h-4 w-4 rotate-180" />
+          </Button>
+        </Link>
+      </div>
+    </div>
+  )
+}
+
 export default function ResumePage() {
-  const { sessionId } = useParams<{ sessionId: string }>()
+  const navigate = useNavigate()
+  const { sessionId } = useParams<{ sessionId?: string }>()
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "1",
       role: "assistant",
-      content: "Hello! I'm your AI resume assistant. Upload your resume and ask me anything about it - I can help you improve it, suggest changes, or answer questions about your experience.",
+      content: "Hello! I'm your AI resume assistant. Upload your resume and I'll analyze it for the Malaysian tech job market. After analysis, you can ask me specific questions about your resume, and I'll query the document directly to give you accurate answers!",
       timestamp: new Date(),
     },
   ])
   const [inputMessage, setInputMessage] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [resumeSession, setResumeSession] = useState<string | null>(null)
+  const [resumeSummary, setResumeSummary] = useState<ResumeSummary | null>(null)
   const [resumeFile, setResumeFile] = useState<ResumeFile | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [targetPosition, setTargetPosition] = useState("Software Engineer")
+  const [targetCompanies, setTargetCompanies] = useState<string[]>(["Grab", "Shopee", "Google"])
+  const [customCompany, setCustomCompany] = useState("")
+  const [potentialQuestions, setPotentialQuestions] = useState<any[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -56,6 +198,14 @@ export default function ResumePage() {
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // Load sessionId from URL if present
+  useEffect(() => {
+    if (sessionId) {
+      setResumeSession(sessionId)
+      // Optionally load existing analysis data here if needed
+    }
+  }, [sessionId])
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -70,27 +220,60 @@ export default function ResumePage() {
     setIsUploading(true)
 
     try {
-      // Create a temporary URL for the file
-      const url = URL.createObjectURL(file)
+      const formData = new FormData()
+      formData.append("file", file)
+      formData.append("target_position", targetPosition)
+      formData.append("target_companies", targetCompanies.join(","))
+
+      const response = await fetch(`${API_BASE_URL}/api/v1/resume/upload`, {
+        method: "POST",
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.statusText}`)
+      }
+
+      const result = await response.json()
+      console.log("Upload result:", result)
+      
+      setResumeSession(result.session_id)
+      setResumeSummary(result.analysis_result)
+      console.log("Resume summary set:", result.analysis_result)
+      
+      // Set potential questions if available
+      if (result.analysis_result?.potential_questions) {
+        setPotentialQuestions(result.analysis_result.potential_questions)
+      }
       
       setResumeFile({
         name: file.name,
         size: file.size,
         type: file.type,
-        url: url,
+        url: URL.createObjectURL(file),
       })
 
-      // Add a message about the upload
+      // Update URL to include sessionId
+      navigate(`/interview/${result.session_id}`)
+
+      // Add upload success message with structured overview
       const uploadMessage: Message = {
         id: Date.now().toString(),
         role: "assistant",
-        content: `Great! I've received your resume "${file.name}". I can now help you analyze it, suggest improvements, or answer any questions about your experience. What would you like to know?`,
+        content: `Great! I've uploaded and analyzed your resume "${file.name}". Here's your comprehensive feedback:`,
         timestamp: new Date(),
       }
       setMessages(prev => [...prev, uploadMessage])
+
     } catch (error) {
       console.error("Upload error:", error)
-      alert("Failed to upload file. Please try again.")
+      const errorMessage: Message = {
+        id: Date.now().toString(),
+        role: "assistant",
+        content: `Sorry, I encountered an error uploading your resume: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
+        timestamp: new Date(),
+      }
+      setMessages(prev => [...prev, errorMessage])
     } finally {
       setIsUploading(false)
       if (fileInputRef.current) {
@@ -100,7 +283,7 @@ export default function ResumePage() {
   }
 
   const handleSendMessage = async () => {
-    if (!inputMessage.trim() || isLoading) return
+    if (!inputMessage.trim() || isLoading || !resumeSession) return
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -108,22 +291,48 @@ export default function ResumePage() {
       content: inputMessage.trim(),
       timestamp: new Date(),
     }
-
     setMessages(prev => [...prev, userMessage])
     setInputMessage("")
     setIsLoading(true)
 
-    // Simulate AI response
-    setTimeout(() => {
+    try {
+      // Query the PDF directly using a chat endpoint
+      const response = await fetch(`${API_BASE_URL}/api/v1/resume/chat/${resumeSession}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: inputMessage.trim(),
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Chat query failed: ${response.statusText}`)
+      }
+
+      const result = await response.json()
+      
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: `I understand you're asking about: "${inputMessage}". Based on your resume, I can help you with that. This is a simulated response - in a real implementation, this would connect to an AI service that analyzes your actual resume content and provides personalized feedback.`,
+        content: result.response || "I'm sorry, I couldn't process your question about the resume.",
         timestamp: new Date(),
       }
       setMessages(prev => [...prev, aiResponse])
+
+    } catch (error) {
+      console.error("Chat error:", error)
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
+        timestamp: new Date(),
+      }
+      setMessages(prev => [...prev, errorMessage])
+    } finally {
       setIsLoading(false)
-    }, 1500)
+    }
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -144,25 +353,82 @@ export default function ResumePage() {
   return (
     <div className="container h-screen py-4 max-w-7xl">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <Link to="/">
-          <Button variant="ghost" size="sm">
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Back to Home
-          </Button>
-        </Link>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline">Session: {sessionId}</Badge>
+      <div className="bg-white border-b p-4 mb-4 rounded-lg shadow-sm">
+        <div className="flex items-center justify-between">
+          <Link to="/">
+            <Button variant="ghost" size="sm">
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              Back to Home
+            </Button>
+          </Link>
+          
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-muted-foreground">Role:</span>
+              <Select value={targetPosition} onValueChange={setTargetPosition}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Software Engineer">Software Engineer</SelectItem>
+                  <SelectItem value="Data Scientist">Data Scientist</SelectItem>
+                  <SelectItem value="Product Manager">Product Manager</SelectItem>
+                  <SelectItem value="Frontend Developer">Frontend Developer</SelectItem>
+                  <SelectItem value="Backend Developer">Backend Developer</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Company Multi-Select */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-muted-foreground">Companies:</span>
+              <div className="flex items-center gap-1 flex-wrap">
+                {targetCompanies.map((company, index) => (
+                  <Badge key={index} variant="secondary" className="cursor-pointer hover:bg-secondary/80 transition-colors">
+                    {company}
+                    <button 
+                      onClick={() => {
+                        const newCompanies = targetCompanies.filter((_, i) => i !== index)
+                        setTargetCompanies(newCompanies)
+                      }}
+                      className="ml-1 text-xs hover:text-red-600 transition-colors"
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+              <Input
+                placeholder="Add company..."
+                value={customCompany}
+                onChange={(e) => setCustomCompany(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === "Enter" && customCompany.trim()) {
+                    e.preventDefault()
+                    setTargetCompanies([...targetCompanies, customCompany.trim()])
+                    setCustomCompany("")
+                  }
+                }}
+                className="w-32 h-8 text-sm"
+              />
+            </div>
+            
+            {resumeSession && (
+              <Badge variant="outline" className="ml-auto">Session: {resumeSession.slice(0, 8)}...</Badge>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-[calc(100vh-8rem)]">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-[calc(100vh-8rem)]">
         {/* Resume Viewer */}
         <Card className="flex flex-col">
           <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Resume Viewer
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Resume Viewer
+              </div>
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col p-0">
@@ -177,6 +443,11 @@ export default function ResumePage() {
                       <Badge variant="secondary" className="text-xs">
                         {formatFileSize(resumeFile.size)}
                       </Badge>
+                      {resumeSummary && (
+                        <Badge variant="default" className="text-xs">
+                          {resumeSummary.overall_assessment?.grade || 'N/A'}
+                        </Badge>
+                      )}
                     </div>
                     <div className="flex items-center gap-1">
                       <Button size="sm" variant="outline" asChild>
@@ -256,16 +527,21 @@ export default function ResumePage() {
             <CardTitle className="flex items-center gap-2">
               <MessageSquare className="h-5 w-5" />
               AI Resume Assistant
+              {resumeSummary && (
+                <Badge variant="default" className="ml-auto">
+                  {resumeSummary.overall_assessment?.grade || 'N/A'}
+                </Badge>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col p-0">
             {/* Messages */}
-            <ScrollArea className="flex-1 p-4">
+            <div className="flex-1 p-4 overflow-y-auto max-h-[680px]">
               <div className="space-y-4">
                 {messages.map((message) => (
                   <div
                     key={message.id}
-                    className={`flex gap-3 ${
+                    className={`flex gap-3 mb-4 ${
                       message.role === "user" ? "justify-end" : "justify-start"
                     }`}
                   >
@@ -275,16 +551,33 @@ export default function ResumePage() {
                       </div>
                     )}
                     <div
-                      className={`max-w-[80%] rounded-lg p-3 ${
+                      className={`max-w-[80%] rounded-2xl p-4 shadow-sm ${
                         message.role === "user"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted"
+                          ? "bg-primary text-primary-foreground ml-auto"
+                          : "bg-muted mr-auto"
                       }`}
                     >
-                      <p className="text-sm">{message.content}</p>
-                      <p className="text-xs opacity-70 mt-1">
-                        {message.timestamp.toLocaleTimeString()}
-                      </p>
+                      <div className="prose prose-sm max-w-none [&_strong]:text-primary [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_ul]:list-disc [&_li]:my-1 [&_p]:text-sm [&_code]:bg-muted px-2 py-1 rounded text-xs">
+                        <ReactMarkdown>{message.content}</ReactMarkdown>
+                      </div>
+                      {/* Show FeedbackOverview after initial analysis message */}
+                      {(() => {
+                        const shouldShow = message.content.includes("comprehensive feedback") && resumeSummary;
+                        console.log("Should show FeedbackOverview:", shouldShow, "Message content:", message.content, "Has summary:", !!resumeSummary);
+                        return shouldShow;
+                      })() && resumeSummary && (
+                        <div className="mt-4">
+                          <FeedbackOverview summary={resumeSummary} />
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="text-xs opacity-70">
+                          {message.timestamp.toLocaleTimeString([], { 
+                            hour: '2-digit', 
+                            minute: '2-digit'
+                          })}
+                        </span>
+                      </div>
                     </div>
                     {message.role === "user" && (
                       <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0">
@@ -305,27 +598,28 @@ export default function ResumePage() {
                 )}
                 <div ref={messagesEndRef} />
               </div>
-            </ScrollArea>
+            </div>
 
             {/* Input */}
-            <div className="p-4 border-t">
-              <div className="flex gap-2">
+            <div className="p-4 border-t bg-background/95">
+              <div className="flex gap-2 max-w-4xl mx-auto">
                 <Input
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
                   onKeyPress={handleKeyPress}
                   placeholder={
-                    resumeFile
-                      ? "Ask about your resume..."
+                    resumeSession
+                      ? "Ask about your resume analysis..."
                       : "Upload a resume first to start chatting..."
                   }
-                  disabled={!resumeFile || isLoading}
-                  className="flex-1"
+                  disabled={!resumeSession || isLoading}
+                  className="flex-1 h-12 resize-none"
                 />
                 <Button
                   onClick={handleSendMessage}
-                  disabled={!inputMessage.trim() || !resumeFile || isLoading}
+                  disabled={!inputMessage.trim() || !resumeSession || isLoading}
                   size="icon"
+                  className="h-12 aspect-square"
                 >
                   <Send className="h-4 w-4" />
                 </Button>
@@ -334,6 +628,11 @@ export default function ResumePage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Potential Questions Section */}
+      {potentialQuestions.length > 0 && (
+        <PotentialQuestionsSection questions={potentialQuestions} sessionId={resumeSession!} />
+      )}
     </div>
   )
 }

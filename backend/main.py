@@ -89,10 +89,12 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Include routers
 from api.routes.interviews import router as interviews_router
 from api.routes.questions import router as questions_router
+from api.routes.resume import router as resume_router
 from api.websocket.interview_ws import router as ws_router
 
 app.include_router(interviews_router, prefix="/api/v1/interviews", tags=["interviews"])
 app.include_router(questions_router, prefix="/api/v1/questions", tags=["questions"])
+app.include_router(resume_router, prefix="/api/v1/resume", tags=["resume"])
 app.include_router(ws_router, tags=["websocket"])
 
 

@@ -19,6 +19,8 @@ import {
   Loader2,
 } from "lucide-react"
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000"
+
 export default function InterviewPage() {
   const { sessionId } = useParams<{ sessionId: string }>()
   const navigate = useNavigate()
@@ -31,6 +33,8 @@ export default function InterviewPage() {
   const [isConnected, setIsConnected] = useState(false)
   const [isComplete, setIsComplete] = useState(false)
   const [connectionError, setConnectionError] = useState<string | null>(null)
+  const [resumeQuestions, setResumeQuestions] = useState<any[]>([])
+  const [includeResumeQuestions, setIncludeResumeQuestions] = useState(false)
 
   // UI state
   const [textMode, setTextMode] = useState(false)
@@ -46,6 +50,25 @@ export default function InterviewPage() {
   // Audio hooks
   const { isRecording, startRecording, stopRecording, error: recorderError } = useAudioRecorder()
   const { playAudio, stopPlayback, initPlayer } = useAudioPlayer()
+
+  // Load resume questions on component mount
+  useEffect(() => {
+    if (sessionId) {
+      const loadResumeQuestions = async () => {
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/v1/resume/questions/${sessionId}`)
+          if (response.ok) {
+            const data = await response.json()
+            setResumeQuestions(data.questions || [])
+          }
+        } catch (error) {
+          console.error('Failed to load resume questions:', error)
+        }
+      }
+      
+      loadResumeQuestions()
+    }
+  }, [sessionId])
 
   // WebSocket ref
   const wsRef = useRef<InterviewWebSocket | null>(null)
@@ -226,6 +249,41 @@ export default function InterviewPage() {
       {/* Progress */}
       {totalQuestions > 0 && (
         <Progress value={progress} className="mb-6" />
+      )}
+
+      {/* Resume Questions Section */}
+      {resumeQuestions.length > 0 && (
+        <Card className="mb-6">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Resume-Based Questions Available</h3>
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">Include in interview:</label>
+                <input
+                  type="checkbox"
+                  checked={includeResumeQuestions}
+                  onChange={(e) => setIncludeResumeQuestions(e.target.checked)}
+                  className="w-4 h-4"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {resumeQuestions.map((question, index) => (
+                <div key={question.id} className="p-3 bg-muted/30 rounded-lg border">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-muted-foreground">
+                      {question.type} • {question.difficulty}
+                    </span>
+                    <Badge variant="outline" className="text-xs">
+                      Q{index + 1}
+                    </Badge>
+                  </div>
+                  <p className="text-sm">{question.question}</p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Transcript */}

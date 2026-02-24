@@ -1,55 +1,90 @@
 """
 Resume Feedback Agent - Provides detailed feedback on resume content and structure.
-Uses Google ADK with Gemini to analyze annotated resume data and generate actionable feedback.
+Uses Gemini Files API for document understanding and analysis.
 """
 
 import json
 import asyncio
 import logging
-from typing import Dict, Any
+import io
+from typing import Dict, Any, Optional
+import pathlib
 
-from google.adk.agents import LlmAgent
-from google.adk.runners import Runner
-from google.adk.sessions import InMemorySessionService
+from google import genai
 from google.genai import types
+
+from config import settings
 
 logger = logging.getLogger(__name__)
 
 RESUME_FEEDBACK_INSTRUCTION = """You are an expert career coach and resume reviewer specializing in Malaysian tech job applications.
 
 ## Your Task
-Analyze the provided resume data and generate comprehensive, actionable feedback to help the candidate improve their resume for Malaysian tech companies.
+Analyze the provided resume document and generate comprehensive, actionable feedback to help the candidate improve their resume for Malaysian tech companies.
 
-## Analysis Framework
+## Analysis Requirements
+1. Evaluate content quality, structure, technical skills, and Malaysian market fit
+2. Provide specific, actionable feedback for each section
+3. Focus on what recruiters notice first (6-second scan)
+4. Suggest improvements for ATS optimization
+5. Target feedback for companies like Grab, Shopee, Google, AirAsia, TNG Digital
 
-### 1. Content Quality (30%)
-- Clarity and impact of descriptions
-- Use of action verbs and quantifiable achievements
-- Relevance to target positions (Software Engineering, Data Science, etc.)
-- Technical depth and specificity
+## Output Format
+Return a JSON response with:
+{
+  "overall_assessment": {
+    "summary": "Brief summary of resume quality",
+    "grade": "A/B/C/D/F",
+    "market_readiness": "Ready/Needs Improvement/Not Ready"
+  },
+  "first_impression_analysis": {
+    "contact_clarity": "How easy candidate is to contact",
+    "professional_summary": "Effectiveness of professional summary",
+    "immediate_highlights": "What recruiters see in 6 seconds",
+    "red_flags": "Potential concerns recruiters might notice"
+  },
+  "section_feedback": {
+    "experience": "Feedback on experience section",
+    "skills": "Feedback on skills presentation",
+    "education": "Feedback on education section",
+    "projects": "Feedback on projects section"
+  },
+  "market_positioning": {
+    "target_companies": "How well positioned for target companies",
+    "salary_expectations": "Market alignment",
+    "skill_priorities": "Skills to emphasize",
+    "career_gaps": "How to address career gaps"
+  },
+  "potential_questions": [
+    {
+      "id": "resume_q_001",
+      "question": "Can you walk me through your most relevant experience for this role?",
+      "type": "behavioral",
+      "difficulty": "easy"
+    },
+    {
+      "id": "resume_q_002", 
+      "question": "What specific technical skills are you most proud of developing?",
+      "type": "technical",
+      "difficulty": "medium"
+    },
+    {
+      "id": "resume_q_003",
+      "question": "Tell me about a challenging project you've worked on and how you overcame obstacles.",
+      "type": "situational", 
+      "difficulty": "medium"
+    }
+  ],
+  "actionable_improvements": [
+    {
+      "area": "Specific area",
+      "suggestion": "What to improve",
+      "example": "Example of how to improve"
+    }
+  ]
+}
 
-### 2. Structure & Organization (25%)
-- Logical flow and readability
-- Section ordering and hierarchy
-- Consistent formatting and spacing
-- Professional presentation
-
-### 3. Technical Skills Assessment (25%)
-- Skill relevance to Malaysian tech market
-- Skill level representation
-- Technology stack alignment
-- Certifications and learning evidence
-
-### 4. Malaysian Market Fit (20%)
-- Alignment with local company expectations (Grab, Shopee, Google Malaysia, etc.)
-- Cultural and professional communication style
-- Local education and experience presentation
-- Language proficiency demonstration
-
-## Required Output Structure
-
-### Overall Assessment
-- Overall score (1-10) with letter grade (A+ to F)
+Focus on practical, implementable suggestions that will make a real difference in job applications.
 - 2-3 sentence executive summary
 - Resume strengths summary
 - Critical improvement areas
@@ -83,41 +118,26 @@ For each resume section (Personal Info, Education, Experience, Skills, Projects)
 """
 
 class ResumeFeedbackAgent:
-    """Resume feedback agent using Google ADK and Gemini for comprehensive resume analysis."""
+    """Resume feedback agent using Gemini Files API for document understanding."""
 
     def __init__(self):
-        self.session_service = InMemorySessionService()
-        self.app_name = "jobless_resume_feedback"
+        self.client = genai.Client()
+        self.model = settings.GEMINI_RESUME_MODEL
 
-        self.agent = LlmAgent(
-            name="resume_feedback_agent",
-            model="gemini-2.5-flash",
-            description="Expert resume reviewer for Malaysian tech job market",
-            instruction=RESUME_FEEDBACK_INSTRUCTION,
-            disallow_transfer_to_parent=True,
-            disallow_transfer_to_peers=True,
-        )
-
-        self.runner = Runner(
-            agent=self.agent,
-            app_name=self.app_name,
-            session_service=self.session_service,
-        )
-
-    async def analyze_resume(
+    async def analyze_resume_document(
         self,
         session_id: str,
-        annotated_resume: Dict[str, Any],
+        resume_path: str,
         target_position: str = "Software Engineer",
         target_companies: list = None,
         max_retries: int = 2,
     ) -> Dict[str, Any]:
         """
-        Analyze annotated resume and generate comprehensive feedback.
+        Analyze resume document using Gemini Files API.
 
         Args:
             session_id: Resume analysis session ID
-            annotated_resume: Resume data from annotation agent
+            resume_path: Path to resume PDF file
             target_position: Target job position/role
             target_companies: List of target companies
             max_retries: Number of retries on failure
@@ -128,100 +148,177 @@ class ResumeFeedbackAgent:
         if target_companies is None:
             target_companies = ["Grab", "Shopee", "Google", "AirAsia", "TNG Digital"]
 
-        # Build comprehensive analysis prompt
-        prompt = f"""Analyze this resume for a {target_position} position in Malaysian tech companies.
+        try:
+            # Get path
+            resume_path = pathlib.Path(resume_path)
+            
+            # Upload to Files API
+            uploaded_file = self.client.files.upload(
+                file=resume_path,
+                config=dict(
+                    mime_type='application/pdf',
+                    display_name=f'resume_{session_id}.pdf'
+                )
+            )
+            
+            logger.info(f"Resume file uploaded: {uploaded_file.name}")
+                
+            # Build analysis prompt
+            prompt = f"""Analyze this resume document for a {target_position} position in Malaysian tech companies.
 
 ## Target Information
 - Target Position: {target_position}
 - Target Companies: {', '.join(target_companies)}
 - Session ID: {session_id}
 
-## Resume Data:
-{json.dumps(annotated_resume, indent=2)}
-
 ## Analysis Requirements:
 1. Evaluate content quality, structure, technical skills, and Malaysian market fit
 2. Provide specific, actionable feedback for each section
-3. Suggest improvements for Malaysian tech company applications
-4. Include market positioning advice and next steps
+3. Focus on what recruiters notice first (6-second scan)
+4. Suggest improvements for ATS optimization
+5. Target feedback for companies like Grab, Shopee, Google, AirAsia, TNG Digital
+6. Generate 3 potential interview questions based on resume content and target position
 
-Generate comprehensive feedback following the specified output structure."""
+{RESUME_FEEDBACK_INSTRUCTION}
 
-        content = types.Content(
-            role="user",
-            parts=[types.Part.from_text(text=prompt)],
-        )
+Provide comprehensive feedback following the specified JSON output structure."""
 
-        last_error = None
-        for attempt in range(max_retries + 1):
-            try:
-                session = await self.session_service.create_session(
-                    app_name=self.app_name,
-                    user_id="resume_analyzer",
-                    state={"session_id": session_id, "target_position": target_position},
-                )
+            # Generate content with uploaded file
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=[uploaded_file, prompt]
+            )
 
-                async for event in self.runner.run_async(
-                    user_id="resume_analyzer",
-                    session_id=session.id,
-                    new_message=content,
-                ):
-                    if event.is_final_response():
-                        if event.content and event.content.parts:
-                            raw_text = event.content.parts[0].text
-                            try:
-                                # Clean up the response
-                                clean = raw_text.strip()
-                                if clean.startswith("```"):
-                                    clean = clean[clean.index("\n") + 1:]
-                                    if clean.endswith("```"):
-                                        clean = clean[:-3].strip()
-                                
-                                # Try to parse as JSON, fallback to raw text
-                                try:
-                                    parsed = json.loads(clean)
-                                    parsed["status"] = "success"
-                                    parsed["session_id"] = session_id
-                                    logger.info(f"[resume_feedback] Success on attempt {attempt + 1}")
-                                    return parsed
-                                except json.JSONDecodeError:
-                                    # Return structured response with raw text
-                                    return {
-                                        "status": "success",
-                                        "session_id": session_id,
-                                        "raw_feedback": raw_text,
-                                        "feedback_format": "raw_text"
-                                    }
+            # Parse response
+            feedback_data = self._parse_feedback_response(response.text)
+            
+            # Clean up uploaded file
+            self.client.files.delete(name=uploaded_file.name)
+            logger.info(f"Analysis completed for session {session_id}")
 
-                            except Exception as parse_error:
-                                logger.error(f"Parse error on attempt {attempt + 1}: {parse_error}")
-                                return {
-                                    "status": "success",
-                                    "session_id": session_id,
-                                    "raw_feedback": raw_text,
-                                    "feedback_format": "raw_text",
-                                    "parse_error": str(parse_error)
-                                }
+            return {
+                "status": "success",
+                "session_id": session_id,
+                "feedback": feedback_data,
+                "analysis_method": "gemini_files_api"
+            }
 
-                    elif event.actions and event.actions.escalate:
-                        last_error = f"Agent escalated: {event.error_message or 'Unknown'}"
-                        break
+        except Exception as e:
+            logger.error(f"Resume analysis failed: {e}")
+            return {
+                "status": "error",
+                "message": f"Failed to analyze resume: {str(e)}",
+                "session_id": session_id
+            }
 
-                if last_error is None:
-                    last_error = "No final response received"
-
-            except Exception as e:
-                last_error = str(e)
-                logger.warning(f"[resume_feedback] Attempt {attempt + 1} failed: {last_error}")
-
-            if attempt < max_retries:
-                await asyncio.sleep(2.0)
-
-        return {
-            "status": "error",
-            "session_id": session_id,
-            "message": f"Resume analysis failed: {last_error}"
-        }
+    def _parse_feedback_response(self, response_text: str) -> Dict[str, Any]:
+        """Parse the AI response into structured feedback."""
+        try:
+            # Try to extract JSON from the response
+            import re
+            
+            # Look for JSON content between ```json and ``` or just find JSON-like content
+            json_match = re.search(r'```json\s*(.*?)\s*```', response_text, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(1).strip()
+            else:
+                # Try to find JSON-like content in the response
+                json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                if json_match:
+                    json_str = json_match.group(0).strip()
+                else:
+                    raise ValueError("No JSON found in response")
+            
+            logger.info(f"Extracted JSON: {json_str}")
+            
+            feedback_data = json.loads(json_str)
+            
+            # Ensure potential_questions is included in the response
+            if "potential_questions" not in feedback_data:
+                feedback_data["potential_questions"] = [
+                    {
+                        "id": "resume_q_001",
+                        "question": "Can you walk me through your most relevant experience for this role?",
+                        "type": "behavioral",
+                        "difficulty": "easy"
+                    },
+                    {
+                        "id": "resume_q_002", 
+                        "question": "What specific technical skills are you most proud of developing?",
+                        "type": "technical",
+                        "difficulty": "medium"
+                    },
+                    {
+                        "id": "resume_q_003",
+                        "question": "Tell me about a challenging project you've worked on and how you overcame obstacles.",
+                        "type": "situational", 
+                        "difficulty": "medium"
+                    }
+                ]
+            
+            return feedback_data
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error: {e}")
+            logger.error(f"Response text: {response_text}")
+            # Return fallback structure
+            return {
+                "overall_assessment": {
+                    "summary": "Unable to parse AI response",
+                    "grade": "N/A",
+                    "market_readiness": "N/A"
+                },
+                "first_impression_analysis": {
+                    "contact_clarity": "N/A",
+                    "professional_summary": "N/A",
+                    "immediate_highlights": "N/A",
+                    "red_flags": []
+                },
+                "section_feedback": {
+                    "experience": "N/A",
+                    "skills": "N/A",
+                    "education": "N/A",
+                    "projects": "N/A"
+                },
+                "market_positioning": {
+                    "target_companies": "N/A",
+                    "salary_expectations": "N/A",
+                    "skill_priorities": "N/A"
+                },
+                "potential_questions": [
+                    {
+                        "id": "resume_q_001",
+                        "question": "Can you walk me through your most relevant experience for this role?",
+                        "type": "behavioral",
+                        "difficulty": "easy"
+                    },
+                    {
+                        "id": "resume_q_002", 
+                        "question": "What specific technical skills are you most proud of developing?",
+                        "type": "technical",
+                        "difficulty": "medium"
+                    },
+                    {
+                        "id": "resume_q_003",
+                        "question": "Tell me about a challenging project you've worked on and how you overcame obstacles.",
+                        "type": "situational", 
+                        "difficulty": "medium"
+                    }
+                ],
+                "actionable_improvements": [
+                    {
+                        "area": "Professional Summary",
+                        "suggestion": "Add 2-3 sentence executive summary",
+                        "example": "Senior Software Engineer with 5+ years experience..."
+                    }
+                ]
+            }
+        except Exception as e:
+            logger.error(f"Failed to parse feedback response: {e}")
+            return {
+                "error": "Failed to parse AI response",
+                "raw_response": response_text
+            }
 
     async def quick_scan(
         self,
@@ -229,126 +326,51 @@ Generate comprehensive feedback following the specified output structure."""
         session_id: str,
     ) -> Dict[str, Any]:
         """
-        Perform a quick resume scan for initial assessment.
-
-        Args:
-            annotated_resume: Resume data from annotation agent
-            session_id: Session identifier
-
-        Returns:
-            Quick assessment with basic metrics and recommendations
+        Perform quick scan based on annotated resume data.
+        This is a fallback method when full document analysis isn't available.
         """
         try:
-            data = annotated_resume.get("data", {})
+            # Extract key information from annotations
+            first_impression = annotated_resume.get("first_impression", {})
+            contact_clarity = annotated_resume.get("contact_clarity", {})
+            red_flags = annotated_resume.get("red_flags", [])
             
-            # Extract basic metrics
-            personal_info = data.get("personal_info", {})
-            education = data.get("education", [])
-            experience = data.get("experience", [])
-            skills = data.get("skills", {})
-            
-            # Calculate basic scores
-            completeness_score = self._calculate_completeness_score(data)
-            experience_score = self._calculate_experience_score(experience)
-            skills_score = self._calculate_skills_score(skills)
-            
-            overall_score = (completeness_score + experience_score + skills_score) / 3
+            # Generate quick feedback
+            quick_feedback = {
+                "overall_assessment": {
+                    "summary": f"Resume for {first_impression.get('name', 'Candidate')} with {first_impression.get('years_experience', 'unknown')} experience",
+                    "grade": "B" if len(red_flags) < 2 else "C",
+                    "market_readiness": "Ready" if len(red_flags) < 2 else "Needs Improvement"
+                },
+                "first_impression_analysis": {
+                    "contact_clarity": f"Contact score: {contact_clarity.get('contact_score', 'N/A')}/10",
+                    "professional_summary": first_impression.get('summary_statement', 'Summary needs improvement'),
+                    "immediate_highlights": "Professional with relevant experience",
+                    "red_flags": red_flags[:3] if red_flags else []
+                },
+                "quick_tips": [
+                    "Add quantifiable achievements to experience",
+                    "Improve contact information completeness",
+                    "Enhance professional summary",
+                    "Organize skills by category"
+                ]
+            }
             
             return {
                 "status": "success",
                 "session_id": session_id,
-                "quick_assessment": {
-                    "overall_score": round(overall_score, 1),
-                    "completeness_score": completeness_score,
-                    "experience_score": experience_score,
-                    "skills_score": skills_score,
-                    "grade": self._get_grade(overall_score),
-                    "metrics": {
-                        "education_entries": len(education),
-                        "experience_entries": len(experience),
-                        "technical_skills": len(skills.get("technical", [])),
-                        "soft_skills": len(skills.get("soft", [])),
-                        "has_contact_info": bool(personal_info.get("email") and personal_info.get("phone")),
-                    },
-                    "immediate_recommendations": self._get_quick_recommendations(data, overall_score)
-                }
+                "feedback": quick_feedback,
+                "analysis_method": "quick_scan"
             }
             
         except Exception as e:
             logger.error(f"Quick scan failed: {e}")
             return {
                 "status": "error",
-                "session_id": session_id,
-                "message": f"Quick scan failed: {str(e)}"
+                "message": f"Quick scan failed: {str(e)}",
+                "session_id": session_id
             }
 
-    def _calculate_completeness_score(self, data: Dict[str, Any]) -> float:
-        """Calculate resume completeness score."""
-        sections = ["personal_info", "education", "experience", "skills"]
-        present_sections = sum(1 for section in sections if data.get(section))
-        return (present_sections / len(sections)) * 10
-
-    def _calculate_experience_score(self, experience: list) -> float:
-        """Calculate experience section score."""
-        if not experience:
-            return 2.0
+                            
+                            
         
-        score = 5.0  # Base score for having experience
-        for exp in experience:
-            if exp.get("description") and len(exp["description"]) > 50:
-                score += 1.0
-            if exp.get("duration"):
-                score += 0.5
-        
-        return min(score, 10.0)
-
-    def _calculate_skills_score(self, skills: Dict[str, Any]) -> float:
-        """Calculate skills section score."""
-        if not skills:
-            return 2.0
-        
-        tech_skills = len(skills.get("technical", []))
-        soft_skills = len(skills.get("soft", []))
-        
-        score = 4.0  # Base score
-        score += min(tech_skills * 0.3, 4.0)  # Max 4 points for tech skills
-        score += min(soft_skills * 0.2, 2.0)  # Max 2 points for soft skills
-        
-        return min(score, 10.0)
-
-    def _get_grade(self, score: float) -> str:
-        """Convert score to letter grade."""
-        if score >= 9.5:
-            return "A+"
-        elif score >= 9.0:
-            return "A"
-        elif score >= 8.0:
-            return "B+"
-        elif score >= 7.0:
-            return "B"
-        elif score >= 6.0:
-            return "C+"
-        elif score >= 5.0:
-            return "C"
-        elif score >= 4.0:
-            return "D"
-        else:
-            return "F"
-
-    def _get_quick_recommendations(self, data: Dict[str, Any], score: float) -> list:
-        """Get quick improvement recommendations."""
-        recommendations = []
-        
-        if not data.get("personal_info", {}).get("email"):
-            recommendations.append("Add professional email address")
-        
-        if len(data.get("experience", [])) < 2:
-            recommendations.append("Add more detailed work experience")
-        
-        if len(data.get("skills", {}).get("technical", [])) < 5:
-            recommendations.append("Expand technical skills section")
-        
-        if score < 6.0:
-            recommendations.append("Consider adding projects or certifications")
-        
-        return recommendations[:3]  # Return top 3 recommendations

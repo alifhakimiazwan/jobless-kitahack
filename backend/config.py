@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     # gemini-2.0-flash-exp-image-generation is the only model supporting both.
     GEMINI_LIVE_MODEL: str = "gemini-2.0-flash-exp-image-generation"
     GEMINI_EVAL_MODEL: str = "gemini-2.5-flash"  # used for evaluation/feedback
+    GEMINI_RESUME_MODEL: str = "gemini-2.5-flash"  # used for resume analysis
 
     # Firebase
     FIREBASE_CREDENTIALS: str = ""
