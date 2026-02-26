@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { useParams, useNavigate } from "react-router-dom"
+import { useParams, useNavigate, useSearchParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
@@ -24,6 +24,8 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000
 export default function InterviewPage() {
   const { sessionId } = useParams<{ sessionId: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const resumeSessionId = searchParams.get("resume")
 
   // Interview state
   const [phase, setPhase] = useState<string>("greeting")
@@ -51,24 +53,22 @@ export default function InterviewPage() {
   const { isRecording, startRecording, stopRecording, error: recorderError } = useAudioRecorder()
   const { playAudio, stopPlayback, initPlayer } = useAudioPlayer()
 
-  // Load resume questions on component mount
+  // Load resume questions preview on component mount (only when ?resume= param is present)
   useEffect(() => {
-    if (sessionId) {
-      const loadResumeQuestions = async () => {
-        try {
-          const response = await fetch(`${API_BASE_URL}/api/v1/resume/questions/${sessionId}`)
-          if (response.ok) {
-            const data = await response.json()
-            setResumeQuestions(data.questions || [])
-          }
-        } catch (error) {
-          console.error('Failed to load resume questions:', error)
+    if (!resumeSessionId) return
+    const loadResumeQuestions = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/v1/resume/questions/${resumeSessionId}`)
+        if (response.ok) {
+          const data = await response.json()
+          setResumeQuestions(data.questions || [])
         }
+      } catch (error) {
+        console.error("Failed to load resume questions:", error)
       }
-      
-      loadResumeQuestions()
     }
-  }, [sessionId])
+    loadResumeQuestions()
+  }, [resumeSessionId])
 
   // WebSocket ref
   const wsRef = useRef<InterviewWebSocket | null>(null)

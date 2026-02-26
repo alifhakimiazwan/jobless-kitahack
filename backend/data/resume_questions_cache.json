@@ -8,7 +8,7 @@
         "difficulty": "easy"
       },
       {
-        "id": "resume_q_002", 
+        "id": "resume_q_002",
         "question": "What specific technical skills are you most proud of developing?",
         "type": "technical",
         "difficulty": "medium"
@@ -16,11 +16,80 @@
       {
         "id": "resume_q_003",
         "question": "Tell me about a challenging project you've worked on and how you overcame obstacles.",
-        "type": "situational", 
+        "type": "situational",
         "difficulty": "medium"
       }
     ],
     "timestamp": "4f945b4f-de0d-45a9-b434-5941c1b8ea33",
     "created_at": "/home/hamzah/git/jobless-kitahack"
+  },
+  "b9bd8f5b-34d4-463e-a32e-fd9270fb5748": {
+    "questions": [
+      {
+        "id": "resume_q_001",
+        "question": "Your 'Ace My Interview' project secured 1st place in a hackathon, and you integrated voice agents. Can you elaborate on the technical challenges you faced with real-time text-to-speech and speech-to-text integration, and how you ensured a seamless user experience?",
+        "type": "technical",
+        "difficulty": "medium"
+      },
+      {
+        "id": "resume_q_002",
+        "question": "You've worked on full-stack projects using various databases like MongoDB and PostgreSQL, and cloud services like Amazon S3. When designing 'Rate My Citra' or 'Chat with PDF,' how did you decide which database or storage solution was most appropriate for specific data types, and what considerations guided those choices?",
+        "type": "technical",
+        "difficulty": "medium"
+      },
+      {
+        "id": "resume_q_003",
+        "question": "You mentioned an interest in DevOps and automation in your summary. Can you tell me about a time in one of your projects where you implemented or considered implementing an automation process, or how you ensured the maintainability and scalability of your applications as they grew?",
+        "type": "situational",
+        "difficulty": "medium"
+      }
+    ],
+    "timestamp": "7ec0d472-636a-4e1b-98d5-d55cb519f99d"
+  },
+  "b1f64dd8-5fa2-468f-a627-d0b806f11397": {
+    "questions": [
+      {
+        "id": "resume_q_001",
+        "question": "Your 'Ace My Interview' project won 1st Place in a hackathon. Can you walk me through the technical challenges you faced when integrating the voice agents using text-to-speech and speech-to-text, and how you overcame them?",
+        "type": "technical",
+        "difficulty": "medium"
+      },
+      {
+        "id": "resume_q_002",
+        "question": "You've extensively used Next.js, React, and MongoDB across multiple projects. How would you decide whether to use this stack versus, say, a Python/Django or Java/Spring Boot backend for a new full-stack application, considering factors like scalability, development speed, and team expertise?",
+        "type": "technical_design",
+        "difficulty": "hard"
+      },
+      {
+        "id": "resume_q_003",
+        "question": "Your summary mentions interest in DevOps and automation. From your 'Chat with PDF' project, can you describe any specific considerations you had for deployment, scaling, or maintaining the application, especially with services like Amazon S3 and Pinecone, even if not fully implemented?",
+        "type": "situational_technical",
+        "difficulty": "medium"
+      }
+    ],
+    "timestamp": "6ce58832-2180-4c5b-8319-178ee0d9d6bc"
+  },
+  "8d006146-11cc-44db-aeb4-788254a483b9": {
+    "questions": [
+      {
+        "id": "resume_q_001",
+        "question": "Your 'Ace My Interview' project won 1st Place at a hackathon. Can you elaborate on the most challenging technical hurdle you faced during its development and how your team overcame it?",
+        "type": "technical",
+        "difficulty": "medium"
+      },
+      {
+        "id": "resume_q_002",
+        "question": "You've worked on full-stack projects using diverse databases like MongoDB and PostgreSQL. Can you discuss a scenario where you had to choose between a NoSQL and a SQL database for a project, and explain your reasoning?",
+        "type": "technical",
+        "difficulty": "medium"
+      },
+      {
+        "id": "resume_q_003",
+        "question": "As a Java Mentor, you guided 20+ students in OOP. Tell me about a time when a mentee struggled significantly with a concept, and how you adapted your teaching approach to help them understand it.",
+        "type": "behavioral",
+        "difficulty": "medium"
+      }
+    ],
+    "timestamp": "9e92ffbd-2b5b-4b33-b12d-b02f6a60e19b"
   }
 }

@@ -30,7 +30,7 @@ const QUESTION_TYPE_OPTIONS: { value: QuestionType; label: string }[] = [
   { value: "product", label: "Product" },
 ]
 
-export default function HomePage() {
+export default function SetupPage() {
   const navigate = useNavigate()
   const [candidateName, setCandidateName] = useState("")
   const [company, setCompany] = useState("")

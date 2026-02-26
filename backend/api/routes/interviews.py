@@ -31,6 +31,7 @@ async def start_interview(request: StartInterviewRequest):
         question_types=request.question_types,
         question_count=request.question_count,
         job_description=request.job_description,
+        resume_session_id=request.resume_session_id,
     )
 
     session = await session_manager.create_session(config)

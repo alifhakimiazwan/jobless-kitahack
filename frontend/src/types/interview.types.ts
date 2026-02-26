@@ -17,6 +17,7 @@ export interface StartInterviewRequest {
   question_types: QuestionType[]
   question_count: number
   job_description?: string
+  resume_session_id?: string
 }
 
 export interface StartInterviewResponse {

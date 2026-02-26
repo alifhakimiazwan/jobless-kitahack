@@ -65,6 +65,7 @@ class InterviewConfig(BaseModel):
     question_types: List[QuestionType] = Field(default_factory=lambda: [QuestionType.BEHAVIORAL])
     question_count: int = Field(default=5, ge=3, le=10)
     job_description: Optional[str] = Field(default=None, max_length=5000)
+    resume_session_id: Optional[str] = None
 
 
 class TranscriptEntry(BaseModel):
@@ -159,6 +160,7 @@ class StartInterviewRequest(BaseModel):
     question_types: List[QuestionType] = Field(default_factory=lambda: [QuestionType.BEHAVIORAL])
     question_count: int = Field(default=5, ge=3, le=10)
     job_description: Optional[str] = Field(default=None, max_length=5000)
+    resume_session_id: Optional[str] = None
 
 
 class StartInterviewResponse(BaseModel):

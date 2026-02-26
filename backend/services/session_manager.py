@@ -18,6 +18,7 @@ from models.schemas import (
 )
 from services.question_bank import question_bank
 from services.jd_question_generator import generate_questions_from_jd
+from services.resume_cache import questions_cache
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,32 @@ class SessionManager:
         questions = []
         jd_summary = None
 
-        if config.job_description:
+        # First priority: resume-tailored questions from the resume cache
+        if config.resume_session_id:
+            cached = questions_cache.get_questions(config.resume_session_id)
+            if cached:
+                raw_questions = cached.get("questions", [])
+                for i, q in enumerate(raw_questions):
+                    try:
+                        questions.append(Question(
+                            id=q.get("id", f"resume-{i}"),
+                            company=config.company,
+                            position=config.position,
+                            type=q.get("type", "behavioral"),
+                            difficulty=q.get("difficulty", "medium"),
+                            question=q.get("question", ""),
+                            follow_ups=[],
+                            evaluation_criteria=[],
+                            tags=["resume-based"],
+                        ))
+                    except Exception as e:
+                        logger.warning(f"Skipping malformed resume question {i}: {e}")
+                logger.info(
+                    f"Loaded {len(questions)} resume questions for session {session_id} "
+                    f"from resume cache {config.resume_session_id}"
+                )
+
+        if not questions and config.job_description:
             try:
                 questions, jd_summary = await generate_questions_from_jd(
                     job_description=config.job_description,

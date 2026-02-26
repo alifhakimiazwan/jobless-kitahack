@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
@@ -17,7 +18,10 @@ import {
   Eye,
   MessageSquare,
   Loader2,
+  ArrowRight,
 } from "lucide-react"
+import { startInterview } from "@/services/api"
+import type { StartInterviewRequest } from "@/types/interview.types"
 
 // API service
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
@@ -36,6 +40,15 @@ interface ResumeFile {
   url: string
 }
 
+interface SectionDetail {
+  score?: number
+  feedback?: string
+  works_well?: string
+  improvement_suggestions?: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  example_phrasing?: any
+}
+
 interface ResumeSummary {
   session_id: string
   overall_assessment: {
@@ -50,10 +63,10 @@ interface ResumeSummary {
     red_flags: string[]
   }
   section_feedback: {
-    experience: string
-    skills: string
-    education: string
-    projects: string
+    experience: SectionDetail | string
+    skills: SectionDetail | string
+    education: SectionDetail | string
+    projects?: SectionDetail | string
   }
   market_positioning: {
     target_companies: string
@@ -73,10 +86,22 @@ interface ResumeSummary {
   }[]
 }
 
+// Helper: section_feedback values can be strings or objects; extract readable text
+function sectionText(val: SectionDetail | string | undefined): string {
+  if (!val) return 'N/A'
+  if (typeof val === 'string') return val
+  return val.feedback || val.works_well || 'N/A'
+}
+
+function sectionScore(val: SectionDetail | string | undefined): number | null {
+  if (!val || typeof val === 'string') return null
+  return val.score ?? null
+}
+
 // Feedback Overview Component
 const FeedbackOverview = ({ summary }: { summary: ResumeSummary }) => {
   if (!summary) return null
-  
+
   return (
     <div className="space-y-4 p-4 bg-muted/30 rounded-lg border">
       {/* Overall Assessment */}
@@ -107,9 +132,19 @@ const FeedbackOverview = ({ summary }: { summary: ResumeSummary }) => {
       <div className="bg-white rounded-lg p-3 shadow-sm border">
         <h3 className="text-base font-semibold mb-2">Section Feedback</h3>
         <div className="grid grid-cols-1 gap-2 text-sm">
-          <div><strong>Experience:</strong> {summary.section_feedback?.experience || 'N/A'}</div>
-          <div><strong>Skills:</strong> {summary.section_feedback?.skills || 'N/A'}</div>
-          <div><strong>Education:</strong> {summary.section_feedback?.education || 'N/A'}</div>
+          {(['experience', 'skills', 'education', 'projects'] as const).map((key) => {
+            const val = summary.section_feedback?.[key as keyof typeof summary.section_feedback]
+            const score = sectionScore(val)
+            return (
+              <div key={key}>
+                <strong className="capitalize">{key}:</strong>
+                {score !== null && (
+                  <span className="ml-1 text-xs text-muted-foreground">({score}/10)</span>
+                )}
+                <span className="ml-1">{sectionText(val)}</span>
+              </div>
+            )
+          })}
         </div>
       </div>
 
@@ -130,7 +165,13 @@ const FeedbackOverview = ({ summary }: { summary: ResumeSummary }) => {
 }
 
 // Potential Questions Section Component
-const PotentialQuestionsSection = ({ questions, sessionId }: { questions: any[], sessionId: string }) => {
+const PotentialQuestionsSection = ({
+  questions,
+  onProceed,
+}: {
+  questions: any[]
+  onProceed: () => void
+}) => {
   return (
     <div className="mt-6 p-4 bg-muted/30 rounded-lg border">
       <div className="flex items-center justify-between mb-4">
@@ -154,14 +195,12 @@ const PotentialQuestionsSection = ({ questions, sessionId }: { questions: any[],
           </div>
         ))}
       </div>
-      
+
       <div className="mt-4 flex justify-center">
-        <Link to={`/interview/${sessionId}`}>
-          <Button className="flex items-center gap-2">
-            Proceed to Interview
-            <ArrowLeft className="h-4 w-4 rotate-180" />
-          </Button>
-        </Link>
+        <Button className="flex items-center gap-2" onClick={onProceed}>
+          Proceed to Interview
+          <ArrowRight className="h-4 w-4" />
+        </Button>
       </div>
     </div>
   )
@@ -188,6 +227,9 @@ export default function ResumePage() {
   const [targetCompanies, setTargetCompanies] = useState<string[]>(["Grab", "Shopee", "Google"])
   const [customCompany, setCustomCompany] = useState("")
   const [potentialQuestions, setPotentialQuestions] = useState<any[]>([])
+  const [showProceedDialog, setShowProceedDialog] = useState(false)
+  const [proceedName, setProceedName] = useState("")
+  const [isProceedLoading, setIsProceedLoading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -253,8 +295,8 @@ export default function ResumePage() {
         url: URL.createObjectURL(file),
       })
 
-      // Update URL to include sessionId
-      navigate(`/interview/${result.session_id}`)
+      // Update URL to include resume sessionId
+      navigate(`/resume/${result.session_id}`, { replace: true })
 
       // Add upload success message with structured overview
       const uploadMessage: Message = {
@@ -339,6 +381,27 @@ export default function ResumePage() {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       handleSendMessage()
+    }
+  }
+
+  const handleProceedToInterview = async () => {
+    if (!proceedName.trim() || !resumeSession) return
+    setIsProceedLoading(true)
+    try {
+      const request: StartInterviewRequest = {
+        candidate_name: proceedName.trim(),
+        company: targetCompanies[0] || "Generic Tech",
+        position: targetPosition,
+        question_types: ["behavioral"],
+        question_count: Math.min(Math.max(potentialQuestions.length, 3), 10),
+        resume_session_id: resumeSession,
+      }
+      const response = await startInterview(request)
+      navigate(`/interview/${response.session_id}?resume=${resumeSession}`)
+    } catch (err) {
+      console.error("Failed to start interview:", err)
+    } finally {
+      setIsProceedLoading(false)
     }
   }
 
@@ -631,7 +694,66 @@ export default function ResumePage() {
 
       {/* Potential Questions Section */}
       {potentialQuestions.length > 0 && (
-        <PotentialQuestionsSection questions={potentialQuestions} sessionId={resumeSession!} />
+        <PotentialQuestionsSection
+          questions={potentialQuestions}
+          onProceed={() => setShowProceedDialog(true)}
+        />
+      )}
+
+      {/* Proceed to Interview Dialog */}
+      {showProceedDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+            <h2 className="text-lg font-semibold mb-1">Start Interview</h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              We'll use the questions generated from your resume. Enter your name to begin.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="proceed-name">Your Name</Label>
+                <Input
+                  id="proceed-name"
+                  placeholder="Enter your name"
+                  value={proceedName}
+                  onChange={(e) => setProceedName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleProceedToInterview()}
+                  className="mt-1"
+                  autoFocus
+                />
+              </div>
+              <div className="text-sm text-muted-foreground">
+                <span className="font-medium">Role:</span> {targetPosition} &nbsp;|&nbsp;
+                <span className="font-medium">Questions:</span> {potentialQuestions.length}
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setShowProceedDialog(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1"
+                  disabled={!proceedName.trim() || isProceedLoading}
+                  onClick={handleProceedToInterview}
+                >
+                  {isProceedLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Starting...
+                    </>
+                  ) : (
+                    <>
+                      Start Interview
+                      <ArrowRight className="h-4 w-4 ml-2" />
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

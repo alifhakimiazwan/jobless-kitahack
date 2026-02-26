@@ -16,6 +16,7 @@ import pathlib
 from agents.resume.feedback_agent import ResumeFeedbackAgent
 from config import settings
 from google import genai
+from services.resume_cache import questions_cache
 
 logger = logging.getLogger(__name__)
 
@@ -23,61 +24,6 @@ router = APIRouter()
 
 class ChatRequest(BaseModel):
     message: str
-
-# Centralized cache for resume questions
-class ResumeQuestionsCache:
-    def __init__(self):
-        self.cache_file = Path("data/resume_questions_cache.json")
-        self.cache: Dict[str, Any] = {}
-        self._load_cache()
-    
-    def _load_cache(self):
-        """Load cache from file if exists"""
-        if self.cache_file.exists():
-            try:
-                with open(self.cache_file, 'r') as f:
-                    self.cache = json.load(f)
-                    logger.info(f"Loaded resume questions cache with {len(self.cache)} sessions")
-            except Exception as e:
-                logger.error(f"Failed to load cache: {e}")
-                self.cache = {}
-    
-    def _save_cache(self):
-        """Save cache to file"""
-        try:
-            self.cache_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.cache_file, 'w') as f:
-                json.dump(self.cache, f, indent=2)
-                logger.info(f"Saved resume questions cache with {len(self.cache)} sessions")
-        except Exception as e:
-            logger.error(f"Failed to save cache: {e}")
-    
-    def set_questions(self, session_id: str, questions: list):
-        """Set questions for a session"""
-        self.cache[session_id] = {
-            "questions": questions,
-            "timestamp": str(uuid.uuid4()),
-            "created_at": str(Path.cwd())  # Simple timestamp
-        }
-        self._save_cache()
-    
-    def get_questions(self, session_id: str):
-        """Get questions for a session"""
-        return self.cache.get(session_id)
-    
-    def cleanup_old_sessions(self, max_sessions: int = 100):
-        """Remove oldest sessions if cache gets too large"""
-        if len(self.cache) > max_sessions:
-            # Sort by timestamp and keep only recent sessions
-            sorted_sessions = sorted(
-                self.cache.items(), 
-                key=lambda x: x[1].get("timestamp", "")
-            )
-            self.cache = dict(sorted_sessions[-max_sessions:])
-            self._save_cache()
-
-# Global cache instance
-questions_cache = ResumeQuestionsCache()
 
 @router.on_event("startup")
 async def startup_event():
