@@ -13,6 +13,7 @@ export default function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/interview/:sessionId" element={<InterviewPage />} />
           <Route path="/feedback/:sessionId" element={<FeedbackPage />} />
+          <Route path="/resume" element={<ResumePage />} />
           <Route path="/resume/:sessionId" element={<ResumePage />} />
         </Route>
       </Routes>

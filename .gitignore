@@ -25,7 +25,7 @@ frontend/dist/
 # Local / Claude Code
 .claude/
 backend/uploads/
-backend/data/resume_question_cache.json
+backend/data/resume_questions_cache.json
 PLAN.md
 
 # Logs
