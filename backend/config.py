@@ -1,5 +1,5 @@
 """
-Configuration settings for JobLess backend.
+Configuration settings for JobBless backend.
 """
 
 import os
@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # Application
-    APP_NAME: str = "JobLess"
+    APP_NAME: str = "JobBless"
     ENVIRONMENT: str = "development"
     PORT: int = 8000
     LOG_LEVEL: str = "INFO"

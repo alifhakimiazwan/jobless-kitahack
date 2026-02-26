@@ -8,7 +8,7 @@ export default function Layout() {
         <div className="container flex h-14 items-center">
           <Link to="/" className="flex items-center gap-2 font-bold text-lg">
             <Briefcase className="h-5 w-5 text-primary" />
-            <span>JobLess</span>
+            <span>JobBless</span>
           </Link>
           <span className="ml-2 text-xs text-muted-foreground">AI Interview Coach</span>
         </div>

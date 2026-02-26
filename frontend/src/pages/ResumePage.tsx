@@ -115,58 +115,60 @@ const AnnotationOverlay = ({ annotations, showAnnotations }: { annotations: Anno
   if (!showAnnotations || annotations.length === 0) return null
 
   return (
-    <div className="absolute inset-0 pointer-events-auto">
-      {annotations.map((annotation, index) => {
-        const colors = {
-          name: 'rgba(59, 130, 246, 0.3)',
-          skills: 'rgba(34, 197, 94, 0.3)',
-          experience: 'rgba(168, 85, 247, 0.3)',
-          education: 'rgba(251, 146, 60, 0.3)',
-          projects: 'rgba(236, 72, 153, 0.3)',
-          default: 'rgba(156, 163, 175, 0.3)',
-        }
+    <div className="absolute inset-0 pointer-events-auto flex items-center justify-center">
+      <div className="relative w-full h-full">
+        {annotations.map((annotation, index) => {
+          const colors = {
+            name: 'rgba(59, 130, 246, 0.3)',
+            skills: 'rgba(34, 197, 94, 0.3)',
+            experience: 'rgba(168, 85, 247, 0.3)',
+            education: 'rgba(251, 146, 60, 0.3)',
+            projects: 'rgba(236, 72, 153, 0.3)',
+            default: 'rgba(156, 163, 175, 0.3)',
+          }
 
-        const borderColor = {
-          name: 'rgb(59, 130, 246)',
-          skills: 'rgb(34, 197, 94)',
-          experience: 'rgb(168, 85, 247)',
-          education: 'rgb(251, 146, 60)',
-          projects: 'rgb(236, 72, 153)',
-          default: 'rgb(156, 163, 175)',
-        }
+          const borderColor = {
+            name: 'rgb(59, 130, 246)',
+            skills: 'rgb(34, 197, 94)',
+            experience: 'rgb(168, 85, 247)',
+            education: 'rgb(251, 146, 60)',
+            projects: 'rgb(236, 72, 153)',
+            default: 'rgb(156, 163, 175)',
+          }
 
-        const color = colors[annotation.element_type as keyof typeof colors] || colors.default
-        const border = borderColor[annotation.element_type as keyof typeof borderColor] || borderColor.default
+          const color = colors[annotation.element_type as keyof typeof colors] || colors.default
+          const border = borderColor[annotation.element_type as keyof typeof borderColor] || borderColor.default
 
-        return (
-          <div
-            key={index}
-            className="absolute border-2 rounded cursor-pointer hover:opacity-70 transition-opacity group"
-            style={{
-              left: `${annotation.top_left_x}%`,
-              top: `${annotation.top_left_y}%`,
-              width: `${annotation.bottom_right_x - annotation.top_left_x}%`,
-              height: `${annotation.bottom_right_y - annotation.top_left_y}%`,
-              backgroundColor: color,
-              borderColor: border,
-            }}
-          >
-            {/* Tooltip */}
-            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block z-50">
-              <div className="relative bg-gray-900 text-white text-xs rounded-lg px-3 py-2 shadow-lg w-48">
-                <div className="font-semibold capitalize mb-1 truncate">{annotation.element_type}</div>
-                <div className="text-gray-300 mb-2 text-xs line-clamp-2">{annotation.reason}</div>
-                <div className="text-gray-100 font-mono text-xs border-t border-gray-700 pt-2 break-all">
-                  {annotation.detail}
-                </div>
-                <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1">
-                  <div className="border-4 border-transparent border-t-gray-900"></div>
+          return (
+            <div
+              key={index}
+              className="absolute border-2 rounded cursor-pointer hover:opacity-70 transition-opacity group"
+              style={{
+                left: `${annotation.top_left_x}%`,
+                top: `${annotation.top_left_y}%`,
+                width: `${annotation.bottom_right_x - annotation.top_left_x}%`,
+                height: `${annotation.bottom_right_y - annotation.top_left_y}%`,
+                backgroundColor: color,
+                borderColor: border,
+              }}
+            >
+              {/* Tooltip */}
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block z-50">
+                <div className="relative bg-gray-900 text-white text-xs rounded-lg px-3 py-2 shadow-lg w-48">
+                  <div className="font-semibold capitalize mb-1 truncate">{annotation.element_type}</div>
+                  <div className="text-gray-300 mb-2 text-xs line-clamp-2">{annotation.reason}</div>
+                  <div className="text-gray-100 font-mono text-xs border-t border-gray-700 pt-2 break-all">
+                    {annotation.detail}
+                  </div>
+                  <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1">
+                    <div className="border-4 border-transparent border-t-gray-900"></div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -305,6 +307,7 @@ export default function ResumePage() {
   const [isProceedLoading, setIsProceedLoading] = useState(false)
   const [annotations, setAnnotations] = useState<Annotation[]>([])
   const [showAnnotations, setShowAnnotations] = useState(true)
+  const [isLoadingSession, setIsLoadingSession] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
@@ -319,9 +322,10 @@ export default function ResumePage() {
 
   // Load sessionId from URL if present
   useEffect(() => {
-    if (sessionId) {
+    if (sessionId && !isLoadingSession) {
       console.log("Frontend sessionId:", sessionId)
       setResumeSession(sessionId)
+      setIsLoadingSession(true)
       // Load existing analysis data
       loadSessionData(sessionId)
     }
@@ -350,6 +354,8 @@ export default function ResumePage() {
   }, [resumeFile])
 
   const loadSessionData = async (sessionId: string) => {
+    if (isLoadingSession) return // Prevent duplicate calls
+    
     try {
       console.log("Loading session data for:", sessionId)
       
@@ -361,14 +367,16 @@ export default function ResumePage() {
         console.log("Analysis data loaded:", analysisData)
         setResumeSummary(analysisData.analysis_result)
         
-        // Add analysis loaded message
-        const analysisMessage: Message = {
-          id: Date.now().toString(),
-          role: "assistant",
-          content: `Here's your resume analysis:`,
-          timestamp: new Date(),
+        // Only add analysis message if messages are empty
+        if (messages.length === 0) {
+          const analysisMessage: Message = {
+            id: Date.now().toString(),
+            role: "assistant",
+            content: `Here's your resume analysis:`,
+            timestamp: new Date(),
+          }
+          setMessages(prev => [...prev, analysisMessage])
         }
-        setMessages(prev => [...prev, analysisMessage])
       } else {
         console.error("Analysis response not OK:", analysisResponse.statusText)
       }
@@ -400,6 +408,8 @@ export default function ResumePage() {
       })
     } catch (error) {
       console.error('Failed to load session data:', error)
+    } finally {
+      setIsLoadingSession(false)
     }
   }
 
