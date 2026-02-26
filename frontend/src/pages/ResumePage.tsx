@@ -114,15 +114,15 @@ const AnnotationOverlay = ({ annotations, showAnnotations }: { annotations: Anno
   if (!showAnnotations || annotations.length === 0) return null
 
   return (
-    <div className="absolute inset-0 pointer-events-auto">
+    <div className="absolute inset-0 pointer-events-auto overflow-hidden">
       {annotations.map((annotation, index) => {
         const colors = {
-          name: 'rgba(59, 130, 246, 0.3)',  // blue
-          skills: 'rgba(34, 197, 94, 0.3)',    // green
-          experience: 'rgba(168, 85, 247, 0.3)', // purple
-          education: 'rgba(251, 146, 60, 0.3)',  // orange
-          projects: 'rgba(236, 72, 153, 0.3)',   // pink
-          default: 'rgba(156, 163, 175, 0.3)'    // gray
+          name: 'rgba(59, 130, 246, 0.3)',
+          skills: 'rgba(34, 197, 94, 0.3)',
+          experience: 'rgba(168, 85, 247, 0.3)',
+          education: 'rgba(251, 146, 60, 0.3)',
+          projects: 'rgba(236, 72, 153, 0.3)',
+          default: 'rgba(156, 163, 175, 0.3)',
         }
 
         const borderColor = {
@@ -131,7 +131,7 @@ const AnnotationOverlay = ({ annotations, showAnnotations }: { annotations: Anno
           experience: 'rgb(168, 85, 247)',
           education: 'rgb(251, 146, 60)',
           projects: 'rgb(236, 72, 153)',
-          default: 'rgb(156, 163, 175)'
+          default: 'rgb(156, 163, 175)',
         }
 
         const color = colors[annotation.element_type as keyof typeof colors] || colors.default
