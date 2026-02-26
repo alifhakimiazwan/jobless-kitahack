@@ -19,6 +19,7 @@ if os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
 
 from config import settings
 from services.question_bank import question_bank
+from services import firestore_service
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL),
@@ -35,6 +36,9 @@ async def lifespan(app: FastAPI):
     # Load question bank
     question_bank.load()
     logger.info(f"Loaded {len(question_bank.questions)} interview questions")
+
+    # Initialize Firestore (no-op if credentials not configured)
+    firestore_service.init_firestore(settings.FIREBASE_CREDENTIALS, settings.FIREBASE_STORAGE_BUCKET)
 
     logger.info(f"{settings.APP_NAME} backend started")
     logger.info(f"Environment: {settings.ENVIRONMENT}")

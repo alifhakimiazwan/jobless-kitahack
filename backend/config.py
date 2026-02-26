@@ -32,6 +32,7 @@ class Settings(BaseSettings):
 
     # Firebase
     FIREBASE_CREDENTIALS: str = ""
+    FIREBASE_STORAGE_BUCKET: str = ""
 
     # CORS
     CORS_ORIGINS: list[str] = [
