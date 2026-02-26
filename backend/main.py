@@ -1,5 +1,5 @@
 """
-JobLess - AI-Powered Interview Practice Platform
+JobBless - AI-Powered Interview Practice Platform
 Main FastAPI application entry point.
 """
 
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
-    logger.info("Starting JobLess backend...")
+    logger.info("Starting JobBless backend...")
 
     # Load question bank
     question_bank.load()
@@ -45,7 +45,7 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    logger.info("Shutting down JobLess backend...")
+    logger.info("Shutting down JobBless backend...")
 
 
 app = FastAPI(

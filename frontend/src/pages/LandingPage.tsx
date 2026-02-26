@@ -11,7 +11,7 @@ export default function LandingPage() {
       {/* Hero */}
       <div className="text-center mb-14">
         <h1 className="text-5xl font-bold tracking-tight mb-4">
-          JobLess
+          JobBless
         </h1>
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
           Your AI-powered interview coach. Analyze your resume, then practice

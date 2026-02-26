@@ -1,4 +1,4 @@
-# JobLess
+# JobBless
 
 <div align="center">
 
@@ -20,7 +20,7 @@ Malaysian fresh graduates face a critical gap: **they lack interview experience*
 
 ## The Solution
 
-**JobLess** conducts realistic voice interviews using curated questions from top Malaysian companies like Grab, Shopee, and Google. After the interview, candidates receive detailed scored feedback with actionable improvement suggestions — all powered by Google's Agent Development Kit (ADK) and Gemini models.
+**JobBless** conducts realistic voice interviews using curated questions from top Malaysian companies like Grab, Shopee, and Google. After the interview, candidates receive detailed scored feedback with actionable improvement suggestions — all powered by Google's Agent Development Kit (ADK) and Gemini models.
 
 ---
 
@@ -100,7 +100,7 @@ Post-Interview Pipeline:
 ## Project Structure
 
 ```
-JobLess/
+JobBless/
 ├── backend/
 │   ├── main.py                      # FastAPI entry point
 │   ├── config.py                    # Settings (pydantic-settings)

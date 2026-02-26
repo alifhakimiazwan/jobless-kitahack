@@ -1,5 +1,5 @@
 """
-Pydantic models for JobLess.
+Pydantic models for JobBless.
 Used for API validation, agent structured output, and session state.
 """
 
