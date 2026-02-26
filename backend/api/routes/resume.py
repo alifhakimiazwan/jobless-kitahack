@@ -4,12 +4,13 @@ Resume API routes - handles resume upload, annotation, and feedback.
 
 import os
 import uuid
+import time
 import logging
 import json
 from typing import Optional, Dict, Any
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 import pathlib
 
@@ -18,6 +19,8 @@ from agents.resume.annotation_agent import ResumeAnnotationAgent
 from config import settings
 from google import genai
 from services.resume_cache import questions_cache
+from services import firestore_service
+from services import storage_service
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +94,10 @@ async def upload_resume(
             buffer.write(content)
         
         logger.info(f"File saved successfully: {file_path.exists()}")
-        
+
+        # Upload to Firebase Storage (non-blocking best-effort)
+        await storage_service.upload_resume(session_id, str(file_path))
+
         # Parse target companies
         companies_list = [c.strip() for c in target_companies.split(",") if c.strip()]
         
@@ -135,7 +141,17 @@ async def upload_resume(
             annotation_result = {"error": str(annotation_result)}
         else:
             logger.info(f"Annotation completed for session {session_id}")
-        
+
+        # Persist to Firestore (non-blocking — fire and forget)
+        cached_questions = questions_cache.get_questions(session_id)
+        await firestore_service.save_resume_analysis(session_id, {
+            "session_id": session_id,
+            "analysis": feedback_result.get("feedback", {}) if not isinstance(feedback_result, Exception) else {},
+            "annotations": annotation_result if not isinstance(annotation_result, Exception) else {},
+            "questions": cached_questions.get("questions", []) if cached_questions else [],
+            "created_at": time.time(),
+        })
+
         return {
             "session_id": session_id,
             "filename": filename,
@@ -315,14 +331,27 @@ async def get_resume_analysis(session_id: str):
         
         # For now, we'll need to re-run feedback since we don't cache the full analysis
         # In production, you'd want to cache the full analysis like questions
+        # Try Firestore first (survives server restarts)
+        doc = await firestore_service.get_resume_analysis(session_id)
+        if doc and doc.get("analysis"):
+            logger.info(f"Returning cached analysis from Firestore for {session_id}")
+            return {
+                "session_id": session_id,
+                "analysis_result": doc["analysis"],
+                "status": "found"
+            }
+
         resume_path = pathlib.Path(f"uploads/resumes/{session_id}.pdf")
-        
+
         if not resume_path.exists():
-            logger.error(f"Resume file not found for sessionId: {session_id}")
-            raise HTTPException(status_code=404, detail="Resume file not found for analysis")
-        
+            logger.info(f"Local file missing for {session_id}, trying Firebase Storage")
+            restored = await storage_service.download_resume(session_id, str(resume_path))
+            if not restored:
+                logger.error(f"Resume file not found for sessionId: {session_id}")
+                raise HTTPException(status_code=404, detail="Resume file not found for analysis")
+
         logger.info(f"Resume file exists for sessionId: {session_id}")
-        
+
         # Re-run analysis (this is not ideal but works for now)
         analysis_result = await feedback_agent.analyze_resume_document(
             session_id,
@@ -330,13 +359,13 @@ async def get_resume_analysis(session_id: str):
             "Software Engineer",  # Default, could be stored with session
             ["Grab", "Shopee", "Google"]  # Default, could be stored with session
         )
-        
+
         logger.info(f"Analysis result for sessionId {session_id}: {analysis_result.get('status', 'unknown')}")
-        
+
         if analysis_result.get("status") == "error":
             logger.error(f"Analysis failed for sessionId {session_id}: {analysis_result.get('message', 'Unknown error')}")
             raise HTTPException(status_code=500, detail=analysis_result.get("message", "Analysis failed"))
-        
+
         return {
             "session_id": session_id,
             "analysis_result": analysis_result.get("feedback", {}),
@@ -357,16 +386,29 @@ async def get_resume_annotations(session_id: str):
     try:
         logger.info(f"Backend received sessionId for annotations: {session_id}")
         
-        # For now, we'll need to re-run annotation since we don't cache it
-        # In production, you'd want to cache annotations like questions
+        # Try Firestore first (survives server restarts)
+        doc = await firestore_service.get_resume_analysis(session_id)
+        if doc and doc.get("annotations"):
+            logger.info(f"Returning cached annotations from Firestore for {session_id}")
+            ann = doc["annotations"]
+            return {
+                "session_id": session_id,
+                "annotations": ann.get("annotations", []),
+                "total_elements": ann.get("total_elements", 0),
+                "status": "found"
+            }
+
         resume_path = pathlib.Path(f"uploads/resumes/{session_id}.pdf")
-        
+
         if not resume_path.exists():
-            logger.error(f"Resume file not found for annotations sessionId: {session_id}")
-            raise HTTPException(status_code=404, detail="Resume file not found for annotation")
-        
+            logger.info(f"Local file missing for {session_id}, trying Firebase Storage")
+            restored = await storage_service.download_resume(session_id, str(resume_path))
+            if not restored:
+                logger.error(f"Resume file not found for annotations sessionId: {session_id}")
+                raise HTTPException(status_code=404, detail="Resume file not found for annotation")
+
         logger.info(f"Resume file exists for annotations sessionId: {session_id}")
-        
+
         annotation_result = await annotation_agent.annotate_resume_document(session_id, str(resume_path))
         
         logger.info(f"Annotation result for sessionId {session_id}: {annotation_result.get('status', 'unknown')}")
@@ -395,8 +437,17 @@ async def get_resume_questions(session_id: str):
     
     try:
         questions_data = questions_cache.get_questions(session_id)
-        
+
         if not questions_data:
+            # Fallback: try Firestore
+            doc = await firestore_service.get_resume_analysis(session_id)
+            if doc and doc.get("questions"):
+                logger.info(f"Returning cached questions from Firestore for {session_id}")
+                return {
+                    "session_id": session_id,
+                    "questions": doc["questions"],
+                    "status": "found"
+                }
             raise HTTPException(status_code=404, detail="Questions not found for this session")
         
         return {
@@ -419,10 +470,13 @@ async def chat_with_resume(session_id: str, request: ChatRequest):
     try:
         # Find the uploaded resume file
         resume_path = pathlib.Path(f"uploads/resumes/{session_id}.pdf")
-        
+
         if not resume_path.exists():
-            raise HTTPException(status_code=404, detail="Resume file not found")
-        
+            logger.info(f"Local file missing for {session_id}, trying Firebase Storage")
+            restored = await storage_service.download_resume(session_id, str(resume_path))
+            if not restored:
+                raise HTTPException(status_code=404, detail="Resume file not found")
+
         # Initialize Gemini client
         client = genai.Client()
         
@@ -463,6 +517,23 @@ async def chat_with_resume(session_id: str, request: ChatRequest):
     except Exception as e:
         logger.error(f"Chat error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
+
+
+@router.get("/file/{session_id}")
+async def get_resume_file(session_id: str):
+    """Serve the resume PDF, downloading from Firebase Storage if the local copy is missing."""
+    resume_path = pathlib.Path(f"uploads/resumes/{session_id}.pdf")
+
+    if not resume_path.exists():
+        restored = await storage_service.download_resume(session_id, str(resume_path))
+        if not restored:
+            raise HTTPException(status_code=404, detail="Resume file not found")
+
+    return FileResponse(
+        path=str(resume_path),
+        media_type="application/pdf",
+        headers={"Content-Disposition": "inline"},
+    )
 
 
 @router.get("/health")

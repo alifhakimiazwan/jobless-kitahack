@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 _db = None
 
 
-def init_firestore(credentials_path: str = ""):
-    """Initialize Firestore client. Safe to call even without credentials."""
+def init_firestore(credentials_path: str = "", storage_bucket: str = ""):
+    """Initialize Firestore (and optionally Firebase Storage). Safe to call without credentials."""
     global _db
     if not credentials_path:
         logger.info("Firestore credentials not configured, using in-memory only")
@@ -25,10 +25,13 @@ def init_firestore(credentials_path: str = ""):
 
         if not firebase_admin._apps:
             cred = credentials.Certificate(credentials_path)
-            firebase_admin.initialize_app(cred)
+            options = {"storageBucket": storage_bucket} if storage_bucket else {}
+            firebase_admin.initialize_app(cred, options)
 
         _db = firestore.client()
         logger.info("Firestore initialized successfully")
+        if storage_bucket:
+            logger.info(f"Firebase Storage bucket: {storage_bucket}")
     except Exception as e:
         logger.warning(f"Firestore initialization failed: {e}. Using in-memory only.")
         _db = None
@@ -92,3 +95,27 @@ async def update_session_field(session_id: str, field: str, value: Any) -> bool:
     except Exception as e:
         logger.error(f"Failed to update session {session_id}.{field}: {e}")
         return False
+
+
+async def save_resume_analysis(session_id: str, data: dict) -> bool:
+    """Save resume analysis to Firestore."""
+    if not _db:
+        return False
+    try:
+        _db.collection("resume_sessions").document(session_id).set(data)
+        return True
+    except Exception as e:
+        logger.error(f"Failed to save resume analysis {session_id}: {e}")
+        return False
+
+
+async def get_resume_analysis(session_id: str) -> Optional[dict]:
+    """Get resume analysis from Firestore."""
+    if not _db:
+        return None
+    try:
+        doc = _db.collection("resume_sessions").document(session_id).get()
+        return doc.to_dict() if doc.exists else None
+    except Exception as e:
+        logger.error(f"Failed to get resume analysis {session_id}: {e}")
+        return None

@@ -367,12 +367,12 @@ export default function ResumePage() {
         setPotentialQuestions(questionsData.questions || [])
       }
 
-      // Load resume file if available
+      // Load resume file via the serve endpoint (has Firebase Storage fallback)
       setResumeFile({
         name: `resume_${sessionId}.pdf`,
         size: 0,
         type: "application/pdf",
-        url: `${API_BASE_URL}/uploads/resumes/${sessionId}.pdf`,
+        url: `${API_BASE_URL}/api/v1/resume/file/${sessionId}`,
       })
     } catch (error) {
       console.error('Failed to load session data:', error)

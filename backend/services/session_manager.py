@@ -19,6 +19,7 @@ from models.schemas import (
 from services.question_bank import question_bank
 from services.jd_question_generator import generate_questions_from_jd
 from services.resume_cache import questions_cache
+from services import firestore_service
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +97,15 @@ class SessionManager:
         )
 
         self._sessions[session_id] = session
+        await firestore_service.save_session(session_id, {
+            "session_id": session_id,
+            "candidate_name": config.candidate_name,
+            "company": config.company,
+            "position": config.position,
+            "status": InterviewStatus.CREATED.value,
+            "question_count": len(questions),
+            "created_at": session.created_at,
+        })
         logger.info(f"Created session {session_id} with {len(questions)} questions")
         return session
 
