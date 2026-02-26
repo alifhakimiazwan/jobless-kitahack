@@ -21,6 +21,7 @@ import {
   Loader2,
   ArrowRight,
 } from "lucide-react"
+import iframeResizer from '@iframe-resizer/react'
 import { startInterview } from "@/services/api"
 import type { StartInterviewRequest } from "@/types/interview.types"
 
@@ -114,7 +115,7 @@ const AnnotationOverlay = ({ annotations, showAnnotations }: { annotations: Anno
   if (!showAnnotations || annotations.length === 0) return null
 
   return (
-    <div className="absolute inset-0 pointer-events-auto overflow-hidden">
+    <div className="absolute inset-0 pointer-events-auto">
       {annotations.map((annotation, index) => {
         const colors = {
           name: 'rgba(59, 130, 246, 0.3)',
@@ -151,14 +152,14 @@ const AnnotationOverlay = ({ annotations, showAnnotations }: { annotations: Anno
             }}
           >
             {/* Tooltip */}
-            <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-50">
-              <div className="bg-gray-900 text-white text-xs rounded-lg px-3 py-2 shadow-lg whitespace-nowrap max-w-sm">
-                <div className="font-semibold capitalize mb-1">{annotation.element_type}</div>
-                <div className="text-gray-300 mb-2">{annotation.reason}</div>
-                <div className="text-gray-100 font-mono text-xs border-t border-gray-700 pt-2">
+            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block z-50">
+              <div className="relative bg-gray-900 text-white text-xs rounded-lg px-3 py-2 shadow-lg w-48">
+                <div className="font-semibold capitalize mb-1 truncate">{annotation.element_type}</div>
+                <div className="text-gray-300 mb-2 text-xs line-clamp-2">{annotation.reason}</div>
+                <div className="text-gray-100 font-mono text-xs border-t border-gray-700 pt-2 break-all">
                   {annotation.detail}
                 </div>
-                <div className="absolute top-full left-4 -mt-1">
+                <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1">
                   <div className="border-4 border-transparent border-t-gray-900"></div>
                 </div>
               </div>
@@ -306,6 +307,7 @@ export default function ResumePage() {
   const [showAnnotations, setShowAnnotations] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const iframeRef = useRef<HTMLIFrameElement>(null)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -324,6 +326,28 @@ export default function ResumePage() {
       loadSessionData(sessionId)
     }
   }, [sessionId])
+
+  // Initialize iframe resizer when resume file is loaded
+  useEffect(() => {
+    if (resumeFile && iframeRef.current) {
+      const iframe = iframeRef.current
+      
+      // Initialize iframe resizer
+      const resizerOptions = {
+        log: false,
+        autoResize: true,
+        heightCalculationMethod: 'bodyOffset',
+        checkOrigin: false,
+        resizeFrom: 'child'
+      }
+
+      // Wait for iframe to load then initialize resizer
+      iframe.onload = () => {
+        // @ts-ignore
+        iframeResizer(resizerOptions, iframe)
+      }
+    }
+  }, [resumeFile])
 
   const loadSessionData = async (sessionId: string) => {
     try {
@@ -694,11 +718,16 @@ export default function ResumePage() {
 
                 {/* PDF Viewer */}
                 <div className="flex-1 bg-muted/20 relative" style={{ minHeight: '600px' }}>
-                  <div className="w-full h-full relative" style={{ aspectRatio: '8.5/11' }}>
+                  <div className="w-full h-full relative overflow-hidden">
                     <iframe
-                      src={resumeFile.url}
+                      ref={iframeRef}
+                      src={`${resumeFile.url}#view=FitV&toolbar=0&navpanes=0&scrollbar=0`}
                       className="w-full h-full border-0 rounded"
                       title="Resume Viewer"
+                      style={{ 
+                        height: '100%',
+                        width: '100%'
+                      }}
                     />
                     <AnnotationOverlay annotations={annotations} showAnnotations={showAnnotations} />
                   </div>
