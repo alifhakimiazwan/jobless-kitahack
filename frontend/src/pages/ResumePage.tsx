@@ -16,6 +16,7 @@ import {
   User,
   Download,
   Eye,
+  EyeOff,
   MessageSquare,
   Loader2,
   ArrowRight,
@@ -47,6 +48,16 @@ interface SectionDetail {
   improvement_suggestions?: string
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   example_phrasing?: any
+}
+
+interface Annotation {
+  top_left_x: number
+  top_left_y: number
+  bottom_right_x: number
+  bottom_right_y: number
+  element_type: string
+  reason: string
+  detail: string
 }
 
 interface ResumeSummary {
@@ -96,6 +107,67 @@ function sectionText(val: SectionDetail | string | undefined): string {
 function sectionScore(val: SectionDetail | string | undefined): number | null {
   if (!val || typeof val === 'string') return null
   return val.score ?? null
+}
+
+// Annotation Overlay Component
+const AnnotationOverlay = ({ annotations, showAnnotations }: { annotations: Annotation[], showAnnotations: boolean }) => {
+  if (!showAnnotations || annotations.length === 0) return null
+
+  return (
+    <div className="absolute inset-0 pointer-events-auto">
+      {annotations.map((annotation, index) => {
+        const colors = {
+          name: 'rgba(59, 130, 246, 0.3)',  // blue
+          skills: 'rgba(34, 197, 94, 0.3)',    // green
+          experience: 'rgba(168, 85, 247, 0.3)', // purple
+          education: 'rgba(251, 146, 60, 0.3)',  // orange
+          projects: 'rgba(236, 72, 153, 0.3)',   // pink
+          default: 'rgba(156, 163, 175, 0.3)'    // gray
+        }
+
+        const borderColor = {
+          name: 'rgb(59, 130, 246)',
+          skills: 'rgb(34, 197, 94)',
+          experience: 'rgb(168, 85, 247)',
+          education: 'rgb(251, 146, 60)',
+          projects: 'rgb(236, 72, 153)',
+          default: 'rgb(156, 163, 175)'
+        }
+
+        const color = colors[annotation.element_type as keyof typeof colors] || colors.default
+        const border = borderColor[annotation.element_type as keyof typeof borderColor] || borderColor.default
+
+        return (
+          <div
+            key={index}
+            className="absolute border-2 rounded cursor-pointer hover:opacity-70 transition-opacity group"
+            style={{
+              left: `${annotation.top_left_x}%`,
+              top: `${annotation.top_left_y}%`,
+              width: `${annotation.bottom_right_x - annotation.top_left_x}%`,
+              height: `${annotation.bottom_right_y - annotation.top_left_y}%`,
+              backgroundColor: color,
+              borderColor: border,
+            }}
+          >
+            {/* Tooltip */}
+            <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-50">
+              <div className="bg-gray-900 text-white text-xs rounded-lg px-3 py-2 shadow-lg whitespace-nowrap max-w-sm">
+                <div className="font-semibold capitalize mb-1">{annotation.element_type}</div>
+                <div className="text-gray-300 mb-2">{annotation.reason}</div>
+                <div className="text-gray-100 font-mono text-xs border-t border-gray-700 pt-2">
+                  {annotation.detail}
+                </div>
+                <div className="absolute top-full left-4 -mt-1">
+                  <div className="border-4 border-transparent border-t-gray-900"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 // Feedback Overview Component
@@ -230,6 +302,8 @@ export default function ResumePage() {
   const [showProceedDialog, setShowProceedDialog] = useState(false)
   const [proceedName, setProceedName] = useState("")
   const [isProceedLoading, setIsProceedLoading] = useState(false)
+  const [annotations, setAnnotations] = useState<Annotation[]>([])
+  const [showAnnotations, setShowAnnotations] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -244,10 +318,66 @@ export default function ResumePage() {
   // Load sessionId from URL if present
   useEffect(() => {
     if (sessionId) {
+      console.log("Frontend sessionId:", sessionId)
       setResumeSession(sessionId)
-      // Optionally load existing analysis data here if needed
+      // Load existing analysis data
+      loadSessionData(sessionId)
     }
   }, [sessionId])
+
+  const loadSessionData = async (sessionId: string) => {
+    try {
+      console.log("Loading session data for:", sessionId)
+      
+      // Load full analysis
+      const analysisResponse = await fetch(`${API_BASE_URL}/api/v1/resume/analysis/${sessionId}`)
+      console.log("Analysis response status:", analysisResponse.status)
+      if (analysisResponse.ok) {
+        const analysisData = await analysisResponse.json()
+        console.log("Analysis data loaded:", analysisData)
+        setResumeSummary(analysisData.analysis_result)
+        
+        // Add analysis loaded message
+        const analysisMessage: Message = {
+          id: Date.now().toString(),
+          role: "assistant",
+          content: `Here's your resume analysis:`,
+          timestamp: new Date(),
+        }
+        setMessages(prev => [...prev, analysisMessage])
+      } else {
+        console.error("Analysis response not OK:", analysisResponse.statusText)
+      }
+
+      // Load annotations
+      const annotationsResponse = await fetch(`${API_BASE_URL}/api/v1/resume/annotations/${sessionId}`)
+      console.log("Annotations response status:", annotationsResponse.status)
+      if (annotationsResponse.ok) {
+        const annotationsData = await annotationsResponse.json()
+        console.log("Annotations data loaded:", annotationsData)
+        setAnnotations(annotationsData.annotations || [])
+      }
+
+      // Load questions
+      const questionsResponse = await fetch(`${API_BASE_URL}/api/v1/resume/questions/${sessionId}`)
+      console.log("Questions response status:", questionsResponse.status)
+      if (questionsResponse.ok) {
+        const questionsData = await questionsResponse.json()
+        console.log("Questions data loaded:", questionsData)
+        setPotentialQuestions(questionsData.questions || [])
+      }
+
+      // Load resume file if available
+      setResumeFile({
+        name: `resume_${sessionId}.pdf`,
+        size: 0,
+        type: "application/pdf",
+        url: `${API_BASE_URL}/uploads/resumes/${sessionId}.pdf`,
+      })
+    } catch (error) {
+      console.error('Failed to load session data:', error)
+    }
+  }
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -286,6 +416,12 @@ export default function ResumePage() {
       // Set potential questions if available
       if (result.analysis_result?.potential_questions) {
         setPotentialQuestions(result.analysis_result.potential_questions)
+      }
+      
+      // Set annotations if available
+      if (result.annotation_result?.annotations) {
+        setAnnotations(result.annotation_result.annotations)
+        console.log("Annotations loaded:", result.annotation_result.annotations)
       }
       
       setResumeFile({
@@ -492,6 +628,26 @@ export default function ResumePage() {
                 <FileText className="h-5 w-5" />
                 Resume Viewer
               </div>
+              {annotations.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAnnotations(!showAnnotations)}
+                  className="flex items-center gap-2"
+                >
+                  {showAnnotations ? (
+                    <>
+                      <EyeOff className="h-4 w-4" />
+                      Hide Annotations
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="h-4 w-4" />
+                      Show Annotations
+                    </>
+                  )}
+                </Button>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col p-0">
@@ -537,12 +693,15 @@ export default function ResumePage() {
                 </div>
 
                 {/* PDF Viewer */}
-                <div className="flex-1 bg-muted/20">
-                  <iframe
-                    src={resumeFile.url}
-                    className="w-full h-full border-0"
-                    title="Resume Viewer"
-                  />
+                <div className="flex-1 bg-muted/20 relative" style={{ minHeight: '600px' }}>
+                  <div className="w-full h-full relative" style={{ aspectRatio: '8.5/11' }}>
+                    <iframe
+                      src={resumeFile.url}
+                      className="w-full h-full border-0 rounded"
+                      title="Resume Viewer"
+                    />
+                    <AnnotationOverlay annotations={annotations} showAnnotations={showAnnotations} />
+                  </div>
                 </div>
               </div>
             ) : (

@@ -14,6 +14,7 @@ from pydantic import BaseModel
 import pathlib
 
 from agents.resume.feedback_agent import ResumeFeedbackAgent
+from agents.resume.annotation_agent import ResumeAnnotationAgent
 from config import settings
 from google import genai
 from services.resume_cache import questions_cache
@@ -32,6 +33,7 @@ async def startup_event():
 
 # Initialize agents
 feedback_agent = ResumeFeedbackAgent()
+annotation_agent = ResumeAnnotationAgent()
 
 # Create upload directory
 UPLOAD_DIR = Path("uploads/resumes")
@@ -93,27 +95,54 @@ async def upload_resume(
         # Parse target companies
         companies_list = [c.strip() for c in target_companies.split(",") if c.strip()]
         
-        # Perform document analysis using Gemini Files API directly
-        analysis_result = await feedback_agent.analyze_resume_document(
+        # Run annotation and feedback agents in parallel
+        import asyncio
+        
+        feedback_task = feedback_agent.analyze_resume_document(
             session_id,
             str(file_path),
             target_position,
             companies_list
         )
         
-        # Save potential questions to centralized cache
-        potential_questions = analysis_result.get("feedback", {}).get("potential_questions", [])
-        if potential_questions:
-            questions_cache.set_questions(session_id, potential_questions)
-            questions_cache.cleanup_old_sessions()  # Clean up old sessions
-            logger.info(f"Saved {len(potential_questions)} potential questions for session {session_id}")
+        annotation_task = annotation_agent.annotate_resume_document(
+            session_id,
+            str(file_path)
+        )
+        
+        # Wait for both to complete (don't wait for annotation before feedback)
+        feedback_result, annotation_result = await asyncio.gather(
+            feedback_task,
+            annotation_task,
+            return_exceptions=True
+        )
+        
+        # Handle feedback result
+        if isinstance(feedback_result, Exception):
+            logger.error(f"Feedback analysis failed: {feedback_result}")
+            feedback_result = {"error": str(feedback_result)}
+        else:
+            # Save potential questions to centralized cache
+            potential_questions = feedback_result.get("feedback", {}).get("potential_questions", [])
+            if potential_questions:
+                questions_cache.set_questions(session_id, potential_questions)
+                questions_cache.cleanup_old_sessions()  # Clean up old sessions
+                logger.info(f"Saved {len(potential_questions)} potential questions for session {session_id}")
+        
+        # Handle annotation result
+        if isinstance(annotation_result, Exception):
+            logger.error(f"Annotation failed: {annotation_result}")
+            annotation_result = {"error": str(annotation_result)}
+        else:
+            logger.info(f"Annotation completed for session {session_id}")
         
         return {
             "session_id": session_id,
             "filename": filename,
             "target_position": target_position,
             "target_companies": companies_list,
-            "analysis_result": analysis_result.get("feedback", {}),
+            "analysis_result": feedback_result.get("feedback", {}) if not isinstance(feedback_result, Exception) else {},
+            "annotation_result": annotation_result if not isinstance(annotation_result, Exception) else {},
             "status": "uploaded"
         }
         
@@ -275,6 +304,89 @@ async def cleanup_session(session_id: str):
     except Exception as e:
         logger.error(f"Cleanup failed: {e}")
         raise HTTPException(status_code=500, detail=f"Cleanup failed: {str(e)}")
+
+
+@router.get("/analysis/{session_id}")
+async def get_resume_analysis(session_id: str):
+    """Get full analysis result for a resume session."""
+    
+    try:
+        logger.info(f"Backend received sessionId for analysis: {session_id}")
+        
+        # For now, we'll need to re-run feedback since we don't cache the full analysis
+        # In production, you'd want to cache the full analysis like questions
+        resume_path = pathlib.Path(f"uploads/resumes/{session_id}.pdf")
+        
+        if not resume_path.exists():
+            logger.error(f"Resume file not found for sessionId: {session_id}")
+            raise HTTPException(status_code=404, detail="Resume file not found for analysis")
+        
+        logger.info(f"Resume file exists for sessionId: {session_id}")
+        
+        # Re-run analysis (this is not ideal but works for now)
+        analysis_result = await feedback_agent.analyze_resume_document(
+            session_id,
+            str(resume_path),
+            "Software Engineer",  # Default, could be stored with session
+            ["Grab", "Shopee", "Google"]  # Default, could be stored with session
+        )
+        
+        logger.info(f"Analysis result for sessionId {session_id}: {analysis_result.get('status', 'unknown')}")
+        
+        if analysis_result.get("status") == "error":
+            logger.error(f"Analysis failed for sessionId {session_id}: {analysis_result.get('message', 'Unknown error')}")
+            raise HTTPException(status_code=500, detail=analysis_result.get("message", "Analysis failed"))
+        
+        return {
+            "session_id": session_id,
+            "analysis_result": analysis_result.get("feedback", {}),
+            "status": "found"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting analysis for sessionId {session_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get analysis: {str(e)}")
+
+
+@router.get("/annotations/{session_id}")
+async def get_resume_annotations(session_id: str):
+    """Get annotation coordinates for a resume session."""
+    
+    try:
+        logger.info(f"Backend received sessionId for annotations: {session_id}")
+        
+        # For now, we'll need to re-run annotation since we don't cache it
+        # In production, you'd want to cache annotations like questions
+        resume_path = pathlib.Path(f"uploads/resumes/{session_id}.pdf")
+        
+        if not resume_path.exists():
+            logger.error(f"Resume file not found for annotations sessionId: {session_id}")
+            raise HTTPException(status_code=404, detail="Resume file not found for annotation")
+        
+        logger.info(f"Resume file exists for annotations sessionId: {session_id}")
+        
+        annotation_result = await annotation_agent.annotate_resume_document(session_id, str(resume_path))
+        
+        logger.info(f"Annotation result for sessionId {session_id}: {annotation_result.get('status', 'unknown')}")
+        
+        if annotation_result.get("status") == "error":
+            logger.error(f"Annotation failed for sessionId {session_id}: {annotation_result.get('message', 'Unknown error')}")
+            raise HTTPException(status_code=500, detail=annotation_result.get("message", "Annotation failed"))
+        
+        return {
+            "session_id": session_id,
+            "annotations": annotation_result.get("annotations", []),
+            "total_elements": annotation_result.get("total_elements", 0),
+            "status": "found"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting annotations for sessionId {session_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get annotations: {str(e)}")
 
 
 @router.get("/questions/{session_id}")
