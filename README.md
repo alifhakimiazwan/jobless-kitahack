@@ -26,6 +26,8 @@ Malaysian fresh graduates face a critical gap: **they lack interview experience*
 
 ## Features
 
+- **Resume Analyzer** — Upload your resume PDF and get coordinate-based annotation overlays highlighting standout sections, plus detailed written feedback on content, structure, and ATS optimization for Malaysian companies.
+
 - **Live Voice Interviews** — Real-time bidirectional audio streaming via Gemini Live API. No typing, just talk.
 
 - **Curated Question Bank** — 150 hand-curated questions from 8 Malaysian companies across behavioral, technical, and situational categories.
@@ -39,6 +41,10 @@ Malaysian fresh graduates face a critical gap: **they lack interview experience*
 - **Phase-Managed Flow** — Structured interview progression: Greeting → Questions → Closing → Complete, managed by the AI conductor.
 
 ---
+
+## How It Works
+
+![How It Works](docs/mermaid-chart.png)
 
 ## Architecture
 
@@ -58,41 +64,45 @@ Browser                         FastAPI                         Google Cloud
 Post-Interview Pipeline:
 ┌─────────────────┐     ┌──────────────────┐     ┌──────────────────┐
 │  Transcript     │────>│  Evaluator Agent  │────>│  Feedback Agent   │
-│  (from session) │     │  gemini-2.5-flash │     │  gemini-2.5-flash │
+│  (from session) │     │  gemini-2.5-pro   │     │  gemini-2.5-pro   │
 │                 │     │  Scores answers   │     │  Generates report │
 └─────────────────┘     └──────────────────┘     └──────────────────┘
 ```
 
-### Agent System (3 ADK Agents)
+### Agent System (5 Agents)
 
-| Agent | Model | Mode | Purpose |
-|---|---|---|---|
-| **Conductor** | `gemini-2.0-flash` | `run_live()` | Manages the live voice interview — greets candidate, asks questions, listens, follows up |
-| **Evaluator** | `gemini-2.5-flash` | `run_async()` | Scores each answer on 4 dimensions with weighted scoring (1-10 scale) |
-| **Feedback** | `gemini-2.5-flash` | `run_async()` | Generates comprehensive feedback report with grades, strengths, and action items |
+| Agent                  | Model              | Mode          | Purpose                                                                                  |
+| ---------------------- | ------------------ | ------------- | ---------------------------------------------------------------------------------------- |
+| **Conductor**          | `gemini-2.5-flash` | `run_live()`  | Manages the live voice interview — greets candidate, asks questions, listens, follows up |
+| **Evaluator**          | `gemini-2.5-pro`   | `run_async()` | Scores each answer on 4 dimensions with weighted scoring (1-10 scale)                    |
+| **Interview Feedback** | `gemini-2.5-pro`   | `run_async()` | Generates comprehensive post-interview report with grades, strengths, and action items   |
+| **Resume Annotation**  | `gemini-2.5-flash` | Direct API    | Analyzes resume PDF via Gemini Files API and returns coordinate-based highlights         |
+| **Resume Feedback**    | `gemini-2.5-flash` | Direct API    | Reviews resume content, structure, and ATS fit for Malaysian tech companies              |
 
 ---
 
 ## Tech Stack
 
 ### Backend
-| Technology | Purpose |
-|---|---|
-| Python 3.12 | Runtime |
-| FastAPI | REST API + WebSocket server |
-| Google ADK | Agent orchestration (`LlmAgent`, `Runner`, `LiveRequestQueue`) |
-| Gemini Live API | Bidirectional audio streaming (STT + LLM + TTS in one round trip) |
-| Pydantic v2 | Data validation + structured agent output schemas |
-| Firebase/Firestore | Session persistence (optional) |
+
+| Technology         | Purpose                                                           |
+| ------------------ | ----------------------------------------------------------------- |
+| Python 3.12        | Runtime                                                           |
+| FastAPI            | REST API + WebSocket server                                       |
+| Google ADK         | Agent orchestration (`LlmAgent`, `Runner`, `LiveRequestQueue`)    |
+| Gemini Live API    | Bidirectional audio streaming (STT + LLM + TTS in one round trip) |
+| Pydantic v2        | Data validation + structured agent output schemas                 |
+| Firebase/Firestore | Session persistence (optional)                                    |
 
 ### Frontend
-| Technology | Purpose |
-|---|---|
-| React 19 | UI framework |
-| Vite 7 | Build tool |
-| TypeScript 5.9 | Type safety |
-| Tailwind CSS 3 | Styling |
-| Radix UI | Accessible UI primitives (shadcn/ui pattern) |
+
+| Technology       | Purpose                                        |
+| ---------------- | ---------------------------------------------- |
+| React 19         | UI framework                                   |
+| Vite 7           | Build tool                                     |
+| TypeScript 5.9   | Type safety                                    |
+| Tailwind CSS 3   | Styling                                        |
+| Radix UI         | Accessible UI primitives (shadcn/ui pattern)   |
 | AudioWorklet API | PCM audio capture (16kHz) and playback (24kHz) |
 
 ---
@@ -106,9 +116,13 @@ JobBless/
 │   ├── config.py                    # Settings (pydantic-settings)
 │   ├── requirements.txt
 │   ├── agents/
-│   │   ├── conductor_agent.py       # Live voice interview agent
-│   │   ├── evaluator_agent.py       # Post-interview scoring
-│   │   └── feedback_agent.py        # Feedback report generation
+│   │   ├── interview/
+│   │   │   ├── conductor_agent.py   # Live voice interview agent
+│   │   │   ├── evaluator_agent.py   # Post-interview scoring
+│   │   │   └── feedback_agent.py    # Interview report generation
+│   │   └── resume/
+│   │       ├── annotation_agent.py  # PDF coordinate-based highlighting
+│   │       └── feedback_agent.py    # Resume content review
 │   ├── services/
 │   │   ├── question_bank.py         # Question loader + selector
 │   │   ├── session_manager.py       # Interview session lifecycle
@@ -131,6 +145,8 @@ JobBless/
 │   └── src/
 │       ├── App.tsx                  # Routes
 │       ├── pages/
+│       │   ├── LandingPage.tsx      # Home — choose resume or interview
+│       │   ├── ResumePage.tsx       # Resume upload, annotations + chat
 │       │   ├── HomePage.tsx         # Interview setup form
 │       │   ├── InterviewPage.tsx    # Live interview UI + audio
 │       │   └── FeedbackPage.tsx     # Post-interview report
@@ -138,7 +154,7 @@ JobBless/
 │       │   ├── useAudioRecorder.ts  # Mic → PCM AudioWorklet
 │       │   └── useAudioPlayer.ts    # PCM → Speaker AudioWorklet
 │       ├── services/
-│       │   ├── api.ts               # REST client (axios)
+│       │   ├── api.ts               # REST client
 │       │   └── websocket.ts         # WebSocket client
 │       └── lib/audio/
 │           ├── pcm-recorder-processor.js
@@ -146,54 +162,6 @@ JobBless/
 │
 └── README.md
 ```
-
----
-
-## API Reference
-
-### REST Endpoints
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/api/v1/interviews/start` | Start a new interview session |
-| `GET` | `/api/v1/interviews/:id/status` | Get interview status and progress |
-| `POST` | `/api/v1/interviews/:id/evaluate` | Trigger evaluation pipeline |
-| `GET` | `/api/v1/interviews/:id/feedback` | Get feedback report |
-| `GET` | `/api/v1/questions/companies` | List available companies |
-| `GET` | `/api/v1/questions/positions` | List available positions |
-| `GET` | `/api/v1/questions/stats` | Question bank statistics |
-
-### WebSocket
-
-```
-WS /ws/interview/{session_id}
-
-Client → Server:  binary PCM audio (16kHz, 16-bit, mono)
-                  JSON: { type: "text_input", text: "..." }
-
-Server → Client:  binary PCM audio (24kHz)
-                  JSON: { type: "transcript", role, text, is_final }
-                  JSON: { type: "phase", phase }
-                  JSON: { type: "metadata", question_number, total_questions }
-                  JSON: { type: "interview_complete" }
-```
-
----
-
-## Question Bank
-
-150 curated questions across 8 company categories:
-
-| Company | Questions | Types |
-|---|---|---|
-| Grab | 20 | Behavioral, Technical, Situational |
-| Shopee | 20 | Behavioral, Technical, Situational |
-| Google | 15 | Behavioral, Technical, System Design |
-| TNG Digital | 15 | Behavioral, Technical |
-| Petronas Digital | 10 | Behavioral, Situational |
-| AirAsia | 10 | Behavioral, Product |
-| Generic Tech | 30 | Mixed |
-| Generic Non-Tech | 30 | Mixed |
 
 ---
 
@@ -231,21 +199,22 @@ npm run dev
 
 ### Environment Variables
 
-| Variable | Required | Description |
-|---|---|---|
-| `GOOGLE_CLOUD_PROJECT` | Yes | Google Cloud project ID |
-| `GOOGLE_API_KEY` | Yes | Gemini API key from AI Studio |
-| `GOOGLE_APPLICATION_CREDENTIALS` | No | Service account JSON path |
-| `FIREBASE_CREDENTIALS` | No | Firebase credentials for persistence |
+| Variable                         | Required | Description                          |
+| -------------------------------- | -------- | ------------------------------------ |
+| `GOOGLE_CLOUD_PROJECT`           | Yes      | Google Cloud project ID              |
+| `GOOGLE_API_KEY`                 | Yes      | Gemini API key from AI Studio        |
+| `GOOGLE_APPLICATION_CREDENTIALS` | No       | Service account JSON path            |
+| `FIREBASE_CREDENTIALS`           | No       | Firebase credentials for persistence |
 
 ---
 
 ## How It Works
 
-1. **Setup** — Candidate selects a company, position, and question types on the home page
-2. **Interview** — The Conductor Agent greets the candidate and asks questions via live voice streaming. It listens, asks follow-ups, and manages the interview flow.
-3. **Evaluation** — After the interview, the Evaluator Agent scores each answer on relevance, depth, structure, and communication
-4. **Feedback** — The Feedback Agent generates a comprehensive report with grades, strengths, improvements, and actionable next steps
+1. **Resume Check (optional)** — Upload a resume PDF. The Annotation Agent highlights key sections with coordinate overlays directly on the document. The Resume Feedback Agent provides written feedback on content, structure, and ATS fit. A chat interface lets candidates ask follow-up questions about their resume.
+2. **Setup** — Candidate selects a company, position, and question types on the setup page (can be pre-filled from the resume flow).
+3. **Interview** — The Conductor Agent greets the candidate and asks questions via live voice streaming. It listens, asks follow-ups, and manages the interview flow through phases: Greeting → Questions → Closing → Complete.
+4. **Evaluation** — After the interview, the Evaluator Agent scores each answer on relevance, depth, structure, and communication.
+5. **Feedback** — The Interview Feedback Agent generates a comprehensive report with letter grades, per-question breakdowns, strengths, and actionable next steps.
 
 ---
 
@@ -264,11 +233,3 @@ npm run dev
 ## Team
 
 Built for **KitaHack 2026** by:
-
-- **Alif Hakimi Azwan**
-
----
-
-## License
-
-This project is licensed under the MIT License.
