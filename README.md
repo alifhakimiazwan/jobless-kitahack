@@ -1,8 +1,8 @@
-# JobBless
+# JobBless — AI Voice Interview Practice with Google ADK Multi-Agent System
 
 <div align="center">
 
-### AI-Powered Voice Interview Practice Platform
+### AI Voice Interview Practice with Google ADK Multi-Agent Systemm
 
 **Practice real interviews with an AI interviewer. Get scored. Get better.**
 
